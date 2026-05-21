@@ -32,7 +32,7 @@ server.starttls()
 # Login
 server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
 
-print("✅ Logged into Gmail Successfully")
+print("Logged into Gmail successfully")
 
 # Loop Through Emails
 for index, row in df.iterrows():
@@ -78,16 +78,16 @@ for index, row in df.iterrows():
             msg.as_string()
         )
 
-        print(f"✅ Sent to: {receiver_email}")
+        print(f"Sent to: {receiver_email}")
 
         # Delay
         time.sleep(5)
 
     except Exception as e:
 
-        print(f"❌ Failed: {receiver_email}")
+        print(f"Failed: {receiver_email}")
         print(e)
 
 server.quit()
 
-print("✅ All Emails Processed")
+print("All emails processed")

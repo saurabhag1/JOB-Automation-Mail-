@@ -1,0 +1,46 @@
+name: Manual Bulk Mail Sender
+
+on:
+  workflow_dispatch:
+
+jobs:
+  send-mails:
+    name: Generate email list and send mails
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: bulk_mail_sender
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: bulk_mail_sender/requirements.txt
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Generate latest all_emails_locations.xlsx
+        run: |
+          rm -f all_emails_locations.xlsx
+          python extract.py
+
+      - name: Upload generated Excel file
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-emails-locations
+          path: bulk_mail_sender/all_emails_locations.xlsx
+
+      - name: Send emails
+        env:
+          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        run: python send_mail.py
