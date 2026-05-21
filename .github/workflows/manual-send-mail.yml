@@ -1,6 +1,10 @@
 name: Manual Bulk Mail Sender
 
 on:
+  schedule:
+    # Runs at 1:30 PM Indian Standard Time, Monday through Friday.
+    # GitHub Actions cron schedules are in UTC, so 13:30 IST is 08:00 UTC.
+    - cron: "0 8 * * 1-5"
   workflow_dispatch:
 
 jobs:
