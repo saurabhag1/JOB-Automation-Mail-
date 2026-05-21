@@ -46,7 +46,7 @@ for index, row in df.iterrows():
 
         msg["From"] = EMAIL_ADDRESS
         msg["To"] = receiver_email
-        msg["Subject"] = f"Application for DevOps Engineer Role - {location}"
+        msg["Subject"] = f"Application for DevOps/Cloud Engineer Role"
 
         # Personalize HTML
         personalized_html = html_template.replace(
