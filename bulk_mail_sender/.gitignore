@@ -1,3 +1,5 @@
 .env
 __pycache__/
 *.py[cod]
+daily_job_leads*.json
+daily_job_leads*.csv
