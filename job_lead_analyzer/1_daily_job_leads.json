@@ -1,0 +1,203 @@
+{
+  "generatedOn": "2026-06-10",
+  "experienceRange": "0-5 yrs",
+  "maxAgeDays": 4,
+  "totalLeads": 10,
+  "leads": [
+    {
+      "company": "Openkyber",
+      "position": "Aws Engineer",
+      "email": "shannon@openkyber.com",
+      "alternateEmails": [],
+      "phone": "",
+      "location": "Remote,Usa",
+      "experience": "Not specified",
+      "skills": [
+        "aws",
+        "python"
+      ],
+      "matchPercentage": 100,
+      "emailType": "personal",
+      "datePosted": "",
+      "source": "serpapi",
+      "url": "https://www.facebook.com/groups/2249498416/posts/10165235667268417/"
+    },
+    {
+      "company": "Momenttext",
+      "position": "Devops Engineer",
+      "email": "harjeev.bhasin@momenttext.com",
+      "alternateEmails": [],
+      "phone": "",
+      "location": "Remote,Bengaluru,Delhi",
+      "experience": "1 yrs",
+      "skills": [
+        "devops",
+        "docker",
+        "kubernetes",
+        "aws",
+        "azure",
+        "gcp",
+        "linux",
+        "monitoring",
+        "infrastructure as code",
+        "iac",
+        "containerization",
+        "sre",
+        "machine learning",
+        "observability",
+        "ai",
+        "automation"
+      ],
+      "matchPercentage": 100,
+      "emailType": "personal",
+      "datePosted": "1 day ago",
+      "source": "serpapi",
+      "url": "https://in.linkedin.com/jobs/view/devops-engineer-at-momenttext-4425573933"
+    },
+    {
+      "company": "",
+      "position": "Cloud Engineer",
+      "email": "ahmed.nkorra@gmail.com",
+      "alternateEmails": [],
+      "phone": "",
+      "location": "Remote",
+      "experience": "Not specified",
+      "skills": [
+        "azure",
+        "ai"
+      ],
+      "matchPercentage": 100,
+      "emailType": "personal",
+      "datePosted": "",
+      "source": "serpapi",
+      "url": "https://www.facebook.com/groups/HireTiptonTn/posts/4542810532629425/"
+    },
+    {
+      "company": "Modahealth",
+      "position": "DevOps Engineer",
+      "email": "humanresources@modahealth.com",
+      "alternateEmails": [],
+      "phone": "",
+      "location": "Remote",
+      "experience": "Not specified",
+      "skills": [
+        "ai"
+      ],
+      "matchPercentage": 100,
+      "emailType": "personal",
+      "datePosted": "2026-06-07T19:21:11+00:00",
+      "source": "remoteok",
+      "url": "https://remoteOK.com/remote-jobs/remote-medical-claims-processor-i-moda-health-1132995"
+    },
+    {
+      "company": "Vishusa",
+      "position": "DevOps Engineer",
+      "email": "vivek@vishusa.com",
+      "alternateEmails": [],
+      "phone": "",
+      "location": "Remote,Usa",
+      "experience": "Not specified",
+      "skills": [
+        "git",
+        "ai"
+      ],
+      "matchPercentage": 100,
+      "emailType": "personal",
+      "datePosted": "2026-06-06T19:23:50+00:00",
+      "source": "remoteok",
+      "url": "https://remoteOK.com/remote-jobs/remote-administrative-support-vish-consulting-it-1132970"
+    },
+    {
+      "company": "Techmahindra",
+      "position": "Devops Engineer",
+      "email": "ac001161903@techmahindra.com",
+      "alternateEmails": [],
+      "phone": "",
+      "location": "Pune",
+      "experience": "4-6 yrs",
+      "skills": [
+        "devops",
+        "automation"
+      ],
+      "matchPercentage": 100,
+      "emailType": "personal",
+      "datePosted": "",
+      "source": "serpapi",
+      "url": "https://www.instagram.com/reel/DZPlxFrTfND/"
+    },
+    {
+      "company": "Accelya",
+      "position": "Devops Engineer",
+      "email": "sayali.wankar@accelya.com",
+      "alternateEmails": [],
+      "phone": "",
+      "location": "Pune",
+      "experience": "Not specified",
+      "skills": [
+        "devops"
+      ],
+      "matchPercentage": 100,
+      "emailType": "personal",
+      "datePosted": "4 days ago",
+      "source": "serpapi",
+      "url": "https://www.jobleads.com/in/job/specialist-devops-engineer--pune-district--e3101a13f80dc7cfb2bd04ba30758113c"
+    },
+    {
+      "company": "Twsol",
+      "position": "Devops Engineer",
+      "email": "junaid.k@twsol.com",
+      "alternateEmails": [],
+      "phone": "",
+      "location": "India",
+      "experience": "Not specified",
+      "skills": [
+        "devops",
+        "azure",
+        "ai",
+        "automation"
+      ],
+      "matchPercentage": 100,
+      "emailType": "personal",
+      "datePosted": "2 days ago",
+      "source": "serpapi",
+      "url": "https://in.linkedin.com/jobs/view/quality-assurance-automation-engineer-at-teamware-solutions-4425452810"
+    },
+    {
+      "company": "Thecignagroup",
+      "position": "DevOps Engineer",
+      "email": "seeyourself@thecignagroup.com",
+      "alternateEmails": [],
+      "phone": "",
+      "location": "United States",
+      "experience": "Not specified",
+      "skills": [
+        "aws",
+        "git",
+        "ai"
+      ],
+      "matchPercentage": 100,
+      "emailType": "personal",
+      "datePosted": "2026-06-09T00:00:00+00:00",
+      "source": "remoteok",
+      "url": "https://remoteOK.com/remote-jobs/remote-customer-service-associate-representative-cigna-healthcare-cigna-healthcare-1133131"
+    },
+    {
+      "company": "Belhati",
+      "position": "Aws Engineer",
+      "email": "kpoornima@belhati.com",
+      "alternateEmails": [],
+      "phone": "",
+      "location": "Canada",
+      "experience": "Not specified",
+      "skills": [
+        "aws",
+        "ai"
+      ],
+      "matchPercentage": 100,
+      "emailType": "personal",
+      "datePosted": "",
+      "source": "serpapi",
+      "url": "https://www.instagram.com/p/DZOsBG4TKSp/"
+    }
+  ]
+}

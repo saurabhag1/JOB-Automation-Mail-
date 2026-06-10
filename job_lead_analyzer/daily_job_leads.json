@@ -1,0 +1,77 @@
+{
+  "generatedOn": "2026-06-10",
+  "experienceRange": "0-5 yrs",
+  "maxAgeDays": 4,
+  "totalLeads": 4,
+  "leads": [
+    {
+      "company": "Openkyber",
+      "position": "Senior Python AWS data engineer job in McLean VA",
+      "email": "shannon@openkyber.com",
+      "alternateEmails": [],
+      "phone": "",
+      "location": "Remote,Usa",
+      "experience": "Not specified",
+      "skills": [
+        "aws",
+        "python"
+      ],
+      "emailType": "personal",
+      "datePosted": "",
+      "source": "serpapi",
+      "url": "https://www.facebook.com/groups/2249498416/posts/10165235667268417/"
+    },
+    {
+      "company": "Belhati",
+      "position": "Ready to build what's next in Edge AI? We're hiring",
+      "email": "kpoornima@belhati.com",
+      "alternateEmails": [],
+      "phone": "",
+      "location": "Canada",
+      "experience": "Not specified",
+      "skills": [
+        "aws",
+        "ai"
+      ],
+      "emailType": "personal",
+      "datePosted": "",
+      "source": "serpapi",
+      "url": "https://www.instagram.com/p/DZOsBG4TKSp/"
+    },
+    {
+      "company": "Innovaesi",
+      "position": "Join our AWS Cloud Engineer Paid Placement Program ...",
+      "email": "connect@innovaesi.com",
+      "alternateEmails": [],
+      "phone": "",
+      "location": "",
+      "experience": "Not specified",
+      "skills": [
+        "aws",
+        "azure"
+      ],
+      "emailType": "personal",
+      "datePosted": "",
+      "source": "serpapi",
+      "url": "https://www.instagram.com/p/DZPLiNliZNI/"
+    },
+    {
+      "company": "Nextastra",
+      "position": "AI/ML Students साठी Dream Opportunity आली आहे! HARMAN ...",
+      "email": "careers@nextastra.com",
+      "alternateEmails": [],
+      "phone": "",
+      "location": "India",
+      "experience": "Not specified",
+      "skills": [
+        "aws",
+        "ai",
+        "ml"
+      ],
+      "emailType": "generic",
+      "datePosted": "",
+      "source": "serpapi",
+      "url": "https://www.instagram.com/reel/DZUzsE0SFow/"
+    }
+  ]
+}
