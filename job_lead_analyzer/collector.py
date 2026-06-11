@@ -22,7 +22,8 @@ from dotenv import load_dotenv
 import config
 import extractor
 import state as state_mod
-from sources import feeds_source, serpapi_source
+from collections import defaultdict
+from sources import feeds_source, serp_providers
 
 load_dotenv()
 
@@ -92,13 +93,18 @@ def parse_args(argv=None):
     p.add_argument("--exp-max", type=int, default=config.EXPERIENCE_MAX,
                    help=f"Maximum years of experience (default {config.EXPERIENCE_MAX}).")
     p.add_argument("--max-searches", type=int, default=config.MAX_SEARCHES,
-                   help=f"SerpApi searches per run (default {config.MAX_SEARCHES}).")
+                   help=f"Searches per provider per run (default {config.MAX_SEARCHES}).")
+    p.add_argument("--per-provider", type=int, default=config.PER_PROVIDER,
+                   help=f"Max unique leads to keep per provider (default {config.PER_PROVIDER}).")
+    p.add_argument("--providers", type=str, default="",
+                   help="Comma-separated SERP providers to use "
+                        f"(default: {','.join(config.SERP_PROVIDERS)}).")
     p.add_argument("--days", type=int, default=config.RECENCY_DAYS,
                    help=f"Only keep posts from the last N days (default {config.RECENCY_DAYS}).")
     p.add_argument("--locations", type=str, default="",
                    help="Comma-separated search locations (overrides config).")
-    p.add_argument("--no-serpapi", action="store_true",
-                   help="Skip SerpApi; use free job feeds only (no key, lower yield).")
+    p.add_argument("--no-serpapi", "--no-serp", dest="no_serpapi", action="store_true",
+                   help="Skip all SERP providers; use free job feeds only (no key, lower yield).")
     p.add_argument("--allow-generic", action="store_true", default=True,
                    help="Allow generic hr@/careers@ as fallback (on by default).")
     p.add_argument("--personal-only", dest="allow_generic", action="store_false",
@@ -115,10 +121,12 @@ def parse_args(argv=None):
 def gather_posts(args):
     """Collect raw posts from the configured sources."""
     locations = [l.strip() for l in args.locations.split(",") if l.strip()] or None
+    providers = [p.strip() for p in args.providers.split(",") if p.strip()] or config.SERP_PROVIDERS
     posts = []
     if not args.no_serpapi:
-        print("Source: SerpApi (public hiring posts)")
-        posts.extend(serpapi_source.collect(locations=locations, max_searches=args.max_searches))
+        print(f"Source: SERP providers -> {', '.join(providers)}")
+        posts.extend(serp_providers.collect(
+            providers=providers, locations=locations, max_searches=args.max_searches))
     print("Source: free job feeds")
     posts.extend(feeds_source.collect(query="devops"))
     return posts
@@ -193,7 +201,9 @@ def main(argv=None):
     posts = [p for p in posts if is_recent(p.get("date_posted", ""), args.days)]
     print(f"After recency filter (<= {args.days} days): {len(posts)}")
 
-    leads = []
+    # Build all qualified leads, globally unique by email (first by rank wins),
+    # so the same HR address never appears twice -- across providers or runs.
+    qualified = []
     used_emails = set()
     for post in posts:
         lead = build_lead(post, args)
@@ -203,10 +213,30 @@ def main(argv=None):
         if primary in seen or primary in used_emails:
             continue  # already used in a previous run or earlier in this run
         used_emails.add(primary)
-        leads.append(lead)
+        qualified.append(lead)
 
-    leads.sort(key=rank_key)
-    selected = leads[: args.target_count]
+    qualified.sort(key=rank_key)
+
+    # Take up to --per-provider leads from EACH source first, so every provider
+    # contributes its own distinct jobs/emails (5 providers x 5 = up to 25).
+    # Then backfill from whatever's left -- strong providers cover for weak or
+    # dead ones -- until we reach --target-count.
+    selected, picked = [], set()
+    per_source = defaultdict(int)
+    for lead in qualified:
+        if len(selected) >= args.target_count:
+            break
+        if per_source[lead["source"]] >= args.per_provider:
+            continue
+        per_source[lead["source"]] += 1
+        picked.add(id(lead))
+        selected.append(lead)
+    for lead in qualified:
+        if len(selected) >= args.target_count:
+            break
+        if id(lead) not in picked:
+            selected.append(lead)
+    selected.sort(key=rank_key)
 
     payload = {
         "generatedOn": _today(),
@@ -223,15 +253,20 @@ def main(argv=None):
         st["last_run"] = _utc_now_iso()
         state_mod.save_state(st, args.state)
 
-    print(f"\nQualified leads found this run: {len(leads)}")
+    print(f"\nQualified leads found this run: {len(qualified)}")
     print(f"Selected (new & unique): {len(selected)} -> written to {args.out}")
     if selected:
+        by_source = defaultdict(int)
+        for l in selected:
+            by_source[l["source"]] += 1
+        print("Per provider: " + ", ".join(f"{s}={n}" for s, n in sorted(by_source.items())))
         print("\nLeads:")
         for i, l in enumerate(selected, 1):
             print(f"  {i:>2}. {l['email']:<38} [{l['emailType']:<8}] "
-                  f"{l['position']:<22} {l['location']}")
+                  f"{l['source']:<11} {l['position']:<22} {l['location']}")
     else:
-        print("No new leads this run. With your SERPAPI_KEY set, try raising "
+        print("No new leads this run. Add more provider keys (SERPER_KEY, "
+              "SCRAPERAPI_KEY, SCRAPINGDOG_KEY, SEARCHAPI_KEY), raise "
               "--max-searches or --days, or run again later.")
     return 0
 

@@ -44,29 +44,46 @@ python3 -m pip install -r requirements.txt
 
 ## Get the most genuine HR emails (recommended)
 
-The reliable source for real personal HR emails is Google search via **SerpApi**
-(free tier = 100 searches/month).
+Real personal HR emails come from Google search. The tool can query **five SERP
+providers** — each returns Google organic results and is asked for its own slice
+of leads, so they surface *different* jobs/emails. All five have a **free tier**;
+you don't need all of them — any provider whose key is missing is skipped and the
+rest still run (graceful fallback).
+
+| provider | env var | free tier | where to get the key |
+|----------|---------|-----------|----------------------|
+| SerpApi | `SERPAPI_KEY` | 250 searches/month | https://serpapi.com/manage-api-key |
+| Serper.dev | `SERPER_KEY` | 2,500 credits (no card) | https://serper.dev → top-right → API Key |
+| ScraperAPI | `SCRAPERAPI_KEY` | 5,000 credits | https://www.scraperapi.com → dashboard |
+| Scrapingdog | `SCRAPINGDOG_KEY` | 1,000 credits (~200 searches) | https://www.scrapingdog.com/google-serp-api |
+| SearchApi.io | `SEARCHAPI_KEY` | 100 searches | https://www.searchapi.io → API Key |
 
 ```bash
 cp .env.example .env
-# edit .env and set:  SERPAPI_KEY=your_key_here   (https://serpapi.com/manage-api-key)
+# edit .env and fill in the keys you have (any subset works)
 ```
 
-> **Credit budget:** the free SerpApi tier is 100 searches/month (~3/day). Each search =
-> 1 credit, and `--max-searches` controls how many you spend per run. Keep it around 3 for
-> daily use, or raise it on days you want more leads. The tool searches LinkedIn, Naukri,
-> Indeed, Glassdoor, Instahyre, Hirect and the open web, restricted to recent posts.
+> **How the count works:** `--per-provider 5` keeps up to 5 unique leads from each
+> provider; with all 5 that's up to **25** unique HR emails per run
+> (`--target-count 25`). Emails are de-duplicated globally — across providers *and*
+> previous runs (`state.json`) — so every lead is a distinct, fresh address.
+>
+> **Credit budget:** `--max-searches` is searches **per provider per run** (each = 1
+> credit; Scrapingdog charges 5). Keep it ~3 for daily use. The tool searches
+> LinkedIn, Naukri, Indeed, Glassdoor, Instahyre, Hirect and the open web,
+> restricted to recent posts.
 
 ## Run (every day)
 
 ```bash
-python3 collector.py --target-count 10
+python3 collector.py                        # 5 providers x 5 = up to 25 unique leads
+python3 collector.py --providers serper,searchapi   # only specific providers
 ```
 
 No key yet? Run on free job feeds only (lower yield, no personal emails guaranteed):
 
 ```bash
-python3 collector.py --target-count 10 --no-serpapi
+python3 collector.py --no-serpapi           # alias: --no-serp (skip all SERP providers)
 ```
 
 Each run writes new emails to `state.json`, so the **next day you get different leads**.
@@ -75,11 +92,13 @@ Each run writes new emails to `state.json`, so the **next day you get different 
 
 ```bash
 python3 collector.py \
-  --target-count 10 \
+  --target-count 25 \                       # total unique leads to keep
+  --per-provider 5 \                        # max unique leads per provider
+  --providers serpapi,serper,scraperapi,scrapingdog,searchapi \
   --exp-min 0 --exp-max 5 \                 # your experience window (default 0–5)
   --days 4 \                                # only posts from the last N days
   --locations "remote,pune,mumbai,singapore,uae,vietnam" \
-  --max-searches 8 \                        # SerpApi credits to spend this run
+  --max-searches 8 \                        # credits to spend per provider this run
   --personal-only \                         # drop generic hr@/careers@ fallback
   --no-dedupe                               # ignore state.json (testing)
 ```

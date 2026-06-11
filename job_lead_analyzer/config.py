@@ -138,10 +138,24 @@ CORE_SKILLS = [
 ]
 MIN_SKILL_MATCHES = 2
 
-# How many fresh, unique leads to collect per run. Override with --target-count.
-TARGET_COUNT = 10
+# SERP providers to scrape, in order. Each returns Google organic results and
+# is queried independently, so each contributes DIFFERENT jobs/HR emails. A
+# provider whose API key (see name -> env var in serp_providers.PROVIDERS) is
+# missing or that errors out is skipped -- the rest still run (graceful
+# fallback). Free tiers: serpapi 250/mo, serper 2,500, scraperapi 5,000,
+# scrapingdog 1,000, searchapi 100.
+SERP_PROVIDERS = ["serpapi", "serper", "scraperapi", "scrapingdog", "searchapi"]
 
-# Default SerpApi search budget per run (each search costs 1 SerpApi credit).
+# How many fresh, unique leads to keep PER PROVIDER (override --per-provider).
+# 5 providers x 5 = up to 25 unique leads per run.
+PER_PROVIDER = 5
+
+# How many fresh, unique leads to collect per run total. Override --target-count.
+# Defaults to PER_PROVIDER x number of SERP providers (5 x 5 = 25).
+TARGET_COUNT = PER_PROVIDER * len(SERP_PROVIDERS)
+
+# Default search budget per provider per run (each = 1 search credit; Scrapingdog
+# charges 5). Keep low for daily use to conserve the free tiers.
 MAX_SEARCHES = 8
 
 # Networking

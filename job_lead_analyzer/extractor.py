@@ -22,6 +22,8 @@ _REJECT_LOCAL = re.compile(
     r"^(no-?reply|do-?not-?reply|donotreply|mailer-?daemon|postmaster|"
     r"automated|notification|notifications|bounce|webmaster|abuse|support|"
     r"reasonable.?accommodation|accommodations?|accessibility|ada|eeo|"
+    r"complaints?|grievances?|dpo|newsletter|marketing|billing|accounts?|"
+    r"payroll|vendor|finance|"
     r"privacy|legal|press|media|investor|unsubscribe|compliance|security)|"
     r".*(fraud|scam|phishing|spam|donotapply)",  # anti-fraud / boilerplate inboxes
     re.IGNORECASE,
@@ -39,6 +41,39 @@ _GENERIC_LOCAL = re.compile(
 
 # Free-mail / placeholder domains we keep but don't over-trust.
 _FREE_DOMAINS = {"example.com", "email.com", "domain.com", "yourcompany.com"}
+
+# Common TLDs, longest first so "comor" repairs to "com" (not "co"). Public
+# pages often glue the next word onto the address ("...@anika.com or ...") and
+# the email regex captures "anika.comor". We trim the trailing word back to a
+# real TLD so only a genuine, deliverable address survives.
+_KNOWN_TLDS = sorted(
+    {
+        "com", "in", "co", "org", "net", "io", "dev", "ai", "me", "us", "uk",
+        "app", "tech", "cloud", "info", "biz", "edu", "gov", "xyz", "online",
+        "site", "store", "solutions", "services", "digital", "global", "group",
+        "ca", "au", "sg", "ae", "de", "nl", "fr", "eu", "world", "work", "jobs",
+        "email", "live", "inc", "ltd", "pro", "consulting", "systems", "software",
+    },
+    key=len,
+    reverse=True,
+)
+
+
+def _repair_domain(domain):
+    """Trim a stray trailing word glued onto a real TLD ('comor' -> 'com').
+
+    Only repairs when the final label is a known TLD followed by extra letters;
+    legitimate rare TLDs (e.g. '.fintech') are left untouched. Returns the
+    (possibly repaired) domain.
+    """
+    head, _, last = domain.rpartition(".")
+    if not head or last in _KNOWN_TLDS:
+        return domain
+    for tld in _KNOWN_TLDS:
+        # e.g. last="comor" starts with "com" and the remainder is alphabetic
+        if last.startswith(tld) and last[len(tld):].isalpha():
+            return f"{head}.{tld}"
+    return domain
 
 
 def is_complete_email(email):
@@ -68,6 +103,9 @@ def extract_emails(text):
     seen = []
     for raw in EMAIL_RE.findall(text or ""):
         email = raw.lower().strip(".")
+        local, _, domain = email.partition("@")
+        if domain:
+            email = f"{local}@{_repair_domain(domain)}"
         if not is_complete_email(email):
             continue
         if email not in seen:

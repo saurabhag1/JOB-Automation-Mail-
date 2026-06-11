@@ -10,10 +10,13 @@ on:
   workflow_dispatch:
     inputs:
       target_count:
-        description: "How many fresh leads to collect"
-        default: "20"
+        description: "How many fresh leads to collect (5 providers x 5 = 25)"
+        default: "25"
+      per_provider:
+        description: "Max unique leads per provider"
+        default: "5"
       max_searches:
-        description: "SerpApi searches to spend (free tier ~100/month)"
+        description: "Searches per provider to spend"
         default: "20"
       max_send:
         description: "Max emails to send this run"
@@ -66,10 +69,15 @@ jobs:
       - name: Collect fresh job leads
         env:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+          SERPER_KEY: ${{ secrets.SERPER_KEY }}
+          SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
+          SCRAPINGDOG_KEY: ${{ secrets.SCRAPINGDOG_KEY }}
+          SEARCHAPI_KEY: ${{ secrets.SEARCHAPI_KEY }}
         run: |
           python collector.py \
-            --target-count "${{ github.event.inputs.target_count || '10' }}" \
-            --max-searches "${{ github.event.inputs.max_searches || '3' }}" \
+            --target-count "${{ github.event.inputs.target_count || '25' }}" \
+            --max-searches "${{ github.event.inputs.max_searches || '6' }}" \
+            --per-provider "${{ github.event.inputs.per_provider || '5' }}" \
             --days "${{ github.event.inputs.days || '4' }}"
 
       - name: Upload leads JSON
