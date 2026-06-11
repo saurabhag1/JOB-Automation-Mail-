@@ -2939,6 +2939,8 @@
             ],
             "matchedSkills": [
                 "devops",
-                "monito
+                "monitoring"
             ]
         }
+    ]
+}
