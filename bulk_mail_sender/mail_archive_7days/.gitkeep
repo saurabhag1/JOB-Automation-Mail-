@@ -1,0 +1,6 @@
+Rolling 7-day store for the follow-up mailer.
+
+followup.py drops a copy of each day's original job file in here as
+jobs_<YYYY-MM-DD>.json. Once 7 files are present the oldest one is used to send
+the follow-up mail and is then deleted, so the next day's file brings the count
+back to 7. Do not edit by hand.

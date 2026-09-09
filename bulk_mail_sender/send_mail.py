@@ -1,5 +1,6 @@
 import pandas as pd
 import smtplib
+import hashlib
 import os
 import time
 
@@ -15,6 +16,11 @@ load_dotenv()
 
 EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+
+# Optional open tracking. Leave unset and nothing is added to the mail; set it to
+# the base URL of a pixel endpoint you host and followup.py can then skip the
+# people who really did open this mail (see TRACKING_OPENS_URL there).
+TRACKING_BASE_URL = os.getenv("TRACKING_BASE_URL", "")
 
 # Read Excel File
 df = pd.read_excel("all_emails_locations.xlsx")
@@ -53,6 +59,15 @@ for index, row in df.iterrows():
             "{{location}}",
             str(location)
         )
+
+        if TRACKING_BASE_URL:
+            token = hashlib.sha1(
+                str(receiver_email).strip().lower().encode("utf-8")
+            ).hexdigest()[:16]
+            personalized_html += (
+                f'<img src="{TRACKING_BASE_URL.rstrip("/")}/{token}.png"'
+                ' width="1" height="1" alt="" style="display:none">'
+            )
 
         msg.attach(MIMEText(personalized_html, "html"))
 

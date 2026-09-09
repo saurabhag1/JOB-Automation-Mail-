@@ -1,0 +1,118 @@
+name: 7-Day Follow-Up Mail
+
+# Runs right after the daily "Manual Bulk Mail Sender" finishes.
+#
+# Two steps, in this order:
+#   1. today's original job file (Pasted text(1).txt) is copied into
+#      bulk_mail_sender/mail_archive_7days/jobs_<date>.json
+#   2. once that folder holds 7 files, the OLDEST one (the 7th-day file) is
+#      followed up: everyone who replied, bounced or was mailed again today is
+#      dropped, the rest get followup_template.html + the resume. That file is
+#      then deleted, so tomorrow's archive brings the folder back to 7.
+#
+# The first week only fills the folder - nothing is followed up until file 7.
+# The folder is committed back to the repo because Actions runners are
+# ephemeral; without that there would be no memory between days.
+on:
+  workflow_run:
+    workflows: ["Manual Bulk Mail Sender"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview only - archive nothing, send nothing"
+        type: boolean
+        default: false
+      max_send:
+        description: "Cap follow-ups this run (0 = no cap)"
+        default: "0"
+      window:
+        description: "Files to hold / days to wait before following up"
+        default: "7"
+
+# Never let two runs rotate the folder at the same time.
+concurrency:
+  group: followup-mail
+  cancel-in-progress: false
+
+permissions:
+  contents: write          # needed to commit the rotated archive back to the repo
+
+jobs:
+  follow-up:
+    name: Archive today's file and follow up on the 7th-day file
+    runs-on: ubuntu-latest
+    # Only after a successful original send, or on manual dispatch.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+
+    defaults:
+      run:
+        working-directory: bulk_mail_sender
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: bulk_mail_sender/requirements.txt
+
+      - name: Install requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Folder state before this run
+        run: python followup.py --status --window "${{ github.event.inputs.window || '7' }}"
+
+      - name: Archive today's file and send the 7th-day follow-up
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        env:
+          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          # Optional: only set if you host an open-tracking pixel endpoint.
+          TRACKING_OPENS_URL: ${{ secrets.TRACKING_OPENS_URL }}
+        run: |
+          python followup.py \
+            --window "${{ github.event.inputs.window || '7' }}" \
+            --max-send "${{ github.event.inputs.max_send || '0' }}"
+
+      - name: Preview only (dry run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        env:
+          EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        run: |
+          python followup.py --dry-run \
+            --window "${{ github.event.inputs.window || '7' }}"
+
+      # always(): today's file must be archived even if the send failed, otherwise
+      # tomorrow's checkout has a new Pasted text(1).txt and this cohort is lost.
+      - name: Persist the rolling 7-day folder
+        if: ${{ always() && github.event.inputs.dry_run != 'true' }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A bulk_mail_sender/mail_archive_7days
+          if git diff --cached --quiet; then
+            echo "Folder unchanged - nothing to commit."
+            exit 0
+          fi
+          git commit -m "chore: rotate 7-day follow-up mail archive [skip ci]"
+          # daily-job-scrape-send.yml pushes on the same trigger, so races happen.
+          for attempt in 1 2 3; do
+            if git pull --rebase --autostash && git push; then
+              echo "Archive pushed on attempt $attempt."
+              exit 0
+            fi
+            echo "Push attempt $attempt failed; retrying in 5s..."
+            sleep 5
+          done
+          echo "Could not push the rotated archive." >&2
+          exit 1
