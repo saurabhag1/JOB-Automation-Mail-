@@ -7,14 +7,16 @@ Every run does two things:
    ``extract.py`` / ``send_mail.py`` just used) is copied into
    ``mail_archive_7days/jobs_<YYYY-MM-DD>.json``.
 
-2. **Follow up** - once that folder holds 7 files, the *oldest* one (the
-   7th-day file) is opened, its HR addresses are re-derived, everyone who
-   replied or whose mail bounced is dropped, and whoever is left gets
-   ``followup_template.html`` + the resume. That file is then deleted, so
-   tomorrow's archive brings the folder back to 7.
+2. **Follow up** - the *oldest* archived file that is at least 7 **days** old
+   is opened, its HR addresses are re-derived, everyone who replied or whose
+   mail bounced is dropped, and whoever is left gets
+   ``followup_template.html`` + the resume. That file is then deleted, so the
+   next-oldest cohort takes its turn tomorrow.
 
-Week one therefore only fills the folder - nothing is followed up until the
-7th file lands.
+The wait is measured in days, not in how many files the folder happens to
+hold. The pipeline only runs Mon-Fri and skips any day without a fresh job
+list, so a file count never reaches 7 on schedule - gating on the count meant
+follow-ups never went out at all.
 
     python3 followup.py --status      # just print the folder
     python3 followup.py --dry-run     # show the plan, send nothing
@@ -58,7 +60,8 @@ DEFAULT_SOURCE = os.path.join(HERE, "Pasted text(1).txt")
 DEFAULT_TEMPLATE = os.path.join(HERE, "followup_template.html")
 DEFAULT_RESUME = os.path.join(HERE, "Saurabh_Agrawal_2026.pdf")
 
-WINDOW = 7                      # files held == days waited before following up
+WINDOW = 7                      # days a cohort waits before it is followed up
+STALE_AFTER = 21                # extra days before an un-sent cohort is abandoned
 ARCHIVE_NAME = "jobs_{}.json"
 ARCHIVE_RE = re.compile(r"^jobs_(\d{4}-\d{2}-\d{2})\.json$")
 EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
@@ -74,7 +77,10 @@ def parse_args(argv=None):
     p.add_argument("--subject", default="Following Up - Application for DevOps/Cloud Engineer Role",
                    help="Follow-up subject line.")
     p.add_argument("--window", type=int, default=WINDOW,
-                   help="Files to hold / days to wait before following up.")
+                   help="Days a cohort waits before it is followed up.")
+    p.add_argument("--max-files", type=int, default=1,
+                   help="Archived days to follow up per run (0 = every one that is due). "
+                        "Default 1 keeps it to one cohort a day.")
     p.add_argument("--max-send", type=int, default=0, help="Cap emails this run (0 = no cap).")
     p.add_argument("--delay", type=float, default=5.0, help="Seconds between sends.")
     p.add_argument("--opens-file", default=os.getenv("TRACKING_OPENS_URL", ""),
@@ -138,15 +144,32 @@ def archive_source(source, archive_dir, dry_run=False):
     return dest
 
 
+def age_of(stamp, today=None):
+    return ((today or date.today()) - datetime.strptime(stamp, "%Y-%m-%d").date()).days
+
+
+def due(files, window, today=None):
+    """``(stamp, path, age)`` for every cohort that has waited ``window`` days."""
+    return [(stamp, path, age_of(stamp, today))
+            for stamp, path in files
+            if age_of(stamp, today) >= window]
+
+
 def prune(archive_dir, window, dry_run=False):
-    """Safety net: never let the folder grow past ``window`` files."""
-    files = archived(archive_dir)
-    for stamp, path in files[: max(0, len(files) - window)]:
+    """Safety net: abandon cohorts so old that following them up is pointless.
+
+    Age-based on purpose. The old rule dropped the oldest file whenever the
+    folder held more than ``window`` files, which deleted cohorts that were
+    still queued for their follow-up.
+    """
+    for stamp, path, age in due(archived(archive_dir), window + STALE_AFTER):
         if dry_run:
-            print(f"- WOULD drop stale {os.path.basename(path)} (never followed up)")
+            print(f"- WOULD drop stale {os.path.basename(path)} "
+                  f"({age} day(s) old, never followed up)")
         else:
             os.remove(path)
-            print(f"- dropped stale {os.path.basename(path)} (never followed up)")
+            print(f"- dropped stale {os.path.basename(path)} "
+                  f"({age} day(s) old, never followed up)")
 
 
 def recipients_from(path):
@@ -264,49 +287,14 @@ def build_message(sender, rec, subject, html, resume, sent_on, days):
     return msg
 
 
-def follow_up(args, pending=()):
-    """Send the 7th-day file's follow-ups, then retire that file."""
-    files = archived(args.archive_dir, pending)
-    if len(files) < args.window:
-        print(f"\nArchive holds {len(files)}/{args.window} file(s) - still filling up, "
-              "no follow-up this run.")
-        return 0
-
-    stamp, oldest = files[0]
+def send_cohort(args, stamp, path, age, user, password,
+                mailed_today, opened, replied, bounced, budget):
+    """Follow up one archived day, then retire its file. ``(rc, sent)``."""
     sent_on = datetime.strptime(stamp, "%Y-%m-%d").date()
-    days = (date.today() - sent_on).days
-    print(f"\n7th-day file: {os.path.basename(oldest)} (mailed {stamp}, {days} day(s) ago)")
+    print(f"\nDue cohort: {os.path.basename(path)} (mailed {stamp}, {age} day(s) ago)")
 
-    candidates = recipients_from(oldest)
+    candidates = recipients_from(path)
     print(f"  {len(candidates)} address(es) were mailed that day")
-
-    # Skip anyone who is in today's original mail - they just heard from you.
-    mailed_today = set()
-    if not args.keep_current and os.path.exists(args.source):
-        mailed_today = {r["email"].lower() for r in recipients_from(args.source)}
-
-    opened = opened_set(args.opens_file)
-    if opened:
-        print(f"  open-tracker reports {len(opened)} opened entr(ies)")
-
-    user = os.getenv("EMAIL_ADDRESS")
-    password = os.getenv("EMAIL_PASSWORD")
-    replied, bounced = set(), set()
-    if args.no_imap:
-        print("  (--no-imap: reply/bounce scan skipped)")
-    elif user and password:
-        try:
-            replied, bounced = scan_mailbox(user, password, sent_on)
-            print(f"  mailbox scan: {len(replied)} sender(s) wrote back, "
-                  f"{len(bounced)} address(es) bounced")
-        except Exception as exc:  # noqa: BLE001 - report and stop, never guess
-            print(f"ERROR: mailbox scan failed ({exc}). Without it there is no way to "
-                  "tell who already replied, so nothing is sent; the file stays put "
-                  "for tomorrow's retry. Use --no-imap to follow up without the check.",
-                  file=sys.stderr)
-            return 1
-    else:
-        print("! EMAIL_ADDRESS / EMAIL_PASSWORD unset - cannot scan for replies.")
 
     targets, skipped = [], []
     for rec in candidates:
@@ -324,9 +312,9 @@ def follow_up(args, pending=()):
 
     for email, why in skipped:
         print(f"  skip {email:<38} ({why})")
-    if args.max_send and len(targets) > args.max_send:
-        print(f"  capping at --max-send {args.max_send} (of {len(targets)})")
-        targets = targets[: args.max_send]
+    if budget is not None and len(targets) > budget:
+        print(f"  capping at --max-send budget {budget} (of {len(targets)})")
+        targets = targets[:budget]
 
     print(f"  -> {len(targets)} follow-up(s) to send"
           f"{' [DRY RUN]' if args.dry_run else ''}")
@@ -334,16 +322,17 @@ def follow_up(args, pending=()):
     if args.dry_run:
         for i, rec in enumerate(targets, 1):
             print(f"  {i:>2}. WOULD follow up {rec['email']:<38} ({rec.get('location', '')})")
-        print(f"Dry run - {os.path.basename(oldest)} kept in the folder.")
-        return 0
+        print(f"Dry run - {os.path.basename(path)} kept in the folder.")
+        return 0, len(targets)
 
+    sent = 0
     if targets:
         if not (user and password):
             print("ERROR: EMAIL_ADDRESS / EMAIL_PASSWORD not set. Aborting.", file=sys.stderr)
-            return 1
+            return 1, 0
         if not os.path.exists(args.resume):
             print(f"ERROR: resume not found at {args.resume}. Aborting.", file=sys.stderr)
-            return 1
+            return 1, 0
         with open(args.template, "r", encoding="utf-8") as fh:
             html = fh.read()
 
@@ -352,10 +341,10 @@ def follow_up(args, pending=()):
         server.login(user, password)
         print("  logged into Gmail")
 
-        sent = failed = 0
+        failed = 0
         for i, rec in enumerate(targets, 1):
             try:
-                msg = build_message(user, rec, args.subject, html, args.resume, sent_on, days)
+                msg = build_message(user, rec, args.subject, html, args.resume, sent_on, age)
                 server.sendmail(user, rec["email"], msg.as_string())
                 sent += 1
                 print(f"  {i:>2}. sent -> {rec['email']}")
@@ -369,10 +358,76 @@ def follow_up(args, pending=()):
     else:
         print("  nobody left to follow up - retiring the file anyway.")
 
-    # This cohort is done: drop its file so tomorrow's archive restores the 7.
-    if os.path.exists(oldest) and os.path.dirname(oldest) == os.path.abspath(args.archive_dir):
-        os.remove(oldest)
-        print(f"- retired {os.path.basename(oldest)}")
+    # This cohort is done: drop its file so the next-oldest takes its turn.
+    if os.path.exists(path) and os.path.dirname(path) == os.path.abspath(args.archive_dir):
+        os.remove(path)
+        print(f"- retired {os.path.basename(path)}")
+    return 0, sent
+
+
+def follow_up(args, pending=()):
+    """Follow up every cohort that has waited ``--window`` days, oldest first."""
+    files = archived(args.archive_dir, pending)
+    ready = due(files, args.window)
+    if not ready:
+        if files:
+            oldest_stamp = files[0][0]
+            waiting = args.window - age_of(oldest_stamp)
+            print(f"\nNothing is {args.window} day(s) old yet - {len(files)} file(s) held, "
+                  f"oldest is {oldest_stamp} ({waiting} more day(s) to wait).")
+        else:
+            print("\nArchive is empty - nothing to follow up.")
+        return 0
+
+    print(f"\n{len(ready)} cohort(s) at or past {args.window} day(s): "
+          + ", ".join(stamp for stamp, _, _ in ready))
+    if args.max_files > 0 and len(ready) > args.max_files:
+        print(f"  handling the oldest {args.max_files} this run "
+              f"(--max-files); the rest go out on the following runs.")
+        ready = ready[: args.max_files]
+
+    # Skip anyone who is in today's original mail - they just heard from you.
+    mailed_today = set()
+    if not args.keep_current and os.path.exists(args.source):
+        mailed_today = {r["email"].lower() for r in recipients_from(args.source)}
+
+    opened = opened_set(args.opens_file)
+    if opened:
+        print(f"  open-tracker reports {len(opened)} opened entr(ies)")
+
+    user = os.getenv("EMAIL_ADDRESS")
+    password = os.getenv("EMAIL_PASSWORD")
+
+    # One mailbox scan covers every cohort - search back to the oldest send.
+    replied, bounced = set(), set()
+    if args.no_imap:
+        print("  (--no-imap: reply/bounce scan skipped)")
+    elif user and password:
+        since = datetime.strptime(ready[0][0], "%Y-%m-%d").date()
+        try:
+            replied, bounced = scan_mailbox(user, password, since)
+            print(f"  mailbox scan since {since}: {len(replied)} sender(s) wrote back, "
+                  f"{len(bounced)} address(es) bounced")
+        except Exception as exc:  # noqa: BLE001 - report and stop, never guess
+            print(f"ERROR: mailbox scan failed ({exc}). Without it there is no way to "
+                  "tell who already replied, so nothing is sent; the files stay put "
+                  "for tomorrow's retry. Use --no-imap to follow up without the check.",
+                  file=sys.stderr)
+            return 1
+    else:
+        print("! EMAIL_ADDRESS / EMAIL_PASSWORD unset - cannot scan for replies.")
+
+    budget = args.max_send if args.max_send > 0 else None
+    for stamp, path, age in ready:
+        if budget == 0:
+            print(f"\n--max-send budget spent - {os.path.basename(path)} waits for the next run.")
+            break
+        rc, sent = send_cohort(args, stamp, path, age, user, password,
+                               mailed_today, opened, replied, bounced, budget)
+        if rc != 0:
+            return rc
+        if budget is not None:
+            budget -= sent
     return 0
 
 
@@ -381,17 +436,21 @@ def show_status(args, pending=()):
     print(f"\nArchive: {args.archive_dir}")
     if not files:
         print("  (empty)")
-    today = date.today()
+    ready = 0
     for i, (stamp, path) in enumerate(files, 1):
-        age = (today - datetime.strptime(stamp, "%Y-%m-%d").date()).days
+        age = age_of(stamp)
         try:
             count = len(recipients_from(path))
         except (OSError, json.JSONDecodeError):
             count = 0
-        tag = "   <- next follow-up" if i == 1 and len(files) >= args.window else ""
+        if age >= args.window:
+            ready += 1
+            tag = "   <- DUE" + (" (goes out next)" if ready == 1 else "")
+        else:
+            tag = f"   waits {args.window - age} more day(s)"
         print(f"  {i}. jobs_{stamp}.json  {age} day(s) old  {count} address(es){tag}")
-    print(f"  {len(files)}/{args.window} file(s) - "
-          + ("ready to follow up." if len(files) >= args.window else "still filling up."))
+    print(f"  {len(files)} file(s) held, {ready} at or past {args.window} day(s) - "
+          + ("ready to follow up." if ready else "nothing due yet."))
 
 
 def main(argv=None):

@@ -5,13 +5,16 @@ name: 7-Day Follow-Up Mail
 # Two steps, in this order:
 #   1. today's original job file (Pasted text(1).txt) is copied into
 #      bulk_mail_sender/mail_archive_7days/jobs_<date>.json
-#   2. once that folder holds 7 files, the OLDEST one (the 7th-day file) is
-#      followed up: everyone who replied, bounced or was mailed again today is
-#      dropped, the rest get followup_template.html + the resume. That file is
-#      then deleted, so tomorrow's archive brings the folder back to 7.
+#   2. the OLDEST archived file that is at least 7 DAYS old is followed up:
+#      everyone who replied, bounced or was mailed again today is dropped, the
+#      rest get followup_template.html + the resume. That file is then deleted,
+#      so the next-oldest cohort takes its turn on the next run.
 #
-# The first week only fills the folder - nothing is followed up until file 7.
-# The folder is committed back to the repo because Actions runners are
+# The wait is counted in days, not in how many files the folder holds. This
+# pipeline only runs Mon-Fri and skips any day without a fresh job list, so the
+# old "wait until the folder holds 7 files" rule never fired at all.
+# One cohort goes out per run by default (max_files); raise it to clear a
+# backlog. The folder is committed back to the repo because Actions runners are
 # ephemeral; without that there would be no memory between days.
 on:
   workflow_run:
@@ -27,8 +30,11 @@ on:
         description: "Cap follow-ups this run (0 = no cap)"
         default: "0"
       window:
-        description: "Files to hold / days to wait before following up"
+        description: "Days to wait before following up"
         default: "7"
+      max_files:
+        description: "Archived days to follow up this run (0 = every one that is due)"
+        default: "1"
 
 # Never let two runs rotate the folder at the same time.
 concurrency:
@@ -40,7 +46,7 @@ permissions:
 
 jobs:
   follow-up:
-    name: Archive today's file and follow up on the 7th-day file
+    name: Archive today's file and follow up the oldest due cohort
     runs-on: ubuntu-latest
     # Only after a successful original send, or on manual dispatch.
     if: >-
@@ -70,7 +76,7 @@ jobs:
       - name: Folder state before this run
         run: python followup.py --status --window "${{ github.event.inputs.window || '7' }}"
 
-      - name: Archive today's file and send the 7th-day follow-up
+      - name: Archive today's file and send the oldest due follow-up
         if: ${{ github.event.inputs.dry_run != 'true' }}
         env:
           EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
@@ -80,6 +86,7 @@ jobs:
         run: |
           python followup.py \
             --window "${{ github.event.inputs.window || '7' }}" \
+            --max-files "${{ github.event.inputs.max_files || '1' }}" \
             --max-send "${{ github.event.inputs.max_send || '0' }}"
 
       - name: Preview only (dry run)
@@ -89,11 +96,12 @@ jobs:
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
         run: |
           python followup.py --dry-run \
-            --window "${{ github.event.inputs.window || '7' }}"
+            --window "${{ github.event.inputs.window || '7' }}" \
+            --max-files "${{ github.event.inputs.max_files || '1' }}"
 
       # always(): today's file must be archived even if the send failed, otherwise
       # tomorrow's checkout has a new Pasted text(1).txt and this cohort is lost.
-      - name: Persist the rolling 7-day folder
+      - name: Persist the rolling follow-up folder
         if: ${{ always() && github.event.inputs.dry_run != 'true' }}
         working-directory: ${{ github.workspace }}
         run: |
