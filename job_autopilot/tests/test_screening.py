@@ -57,7 +57,9 @@ def test_title_words_not_substrings(settings):
 
 def test_experience(settings):
     assert experience_reason(make_job(description="Experience: 2-4 years of DevOps."), settings) == ""
-    assert experience_reason(make_job(description="Requires 5+ years of experience."), settings) != ""
+    # 3 years + experience_stretch 2: a 5+ posting is still worth applying to, 6+ is not.
+    assert experience_reason(make_job(description="Requires 5+ years of experience."), settings) == ""
+    assert experience_reason(make_job(description="Requires 6+ years of experience."), settings) != ""
     assert experience_reason(make_job(experience_text="0-1 Yrs", description=""), settings).startswith("too junior")
     assert experience_reason(make_job(description="No years mentioned."), settings) == ""
 

@@ -34,7 +34,7 @@ search:
   max_age_days: 7          # freshness: discard anything posted earlier than this
   drop_undated: true       # strict: drop postings with no date unless the source filtered by date
   experience_years: 3      # your experience
-  experience_stretch: 1    # still apply when a posting asks for up to this many more years
+  experience_stretch: 2    # still apply when a posting asks for up to this many more years (3 -> up to 5)
   min_match: 0.30          # share of the posting's tech requirements you must cover (0-1)
   avoid_companies: [iEnergizer, Ienegizer]   # never apply here (e.g. your current employer)
   exclude_phrases: []      # drop postings that contain any of these phrases
@@ -62,6 +62,13 @@ sources:
   # Each search spends 1 credit (Scrapingdog 5); the lead collector in GitHub Actions
   # uses the same keys, so keep this modest.
   google_search: {enabled: true, max_searches: 20}
+  # AI search (replaces the plain Google search above when enabled, and uses its max_searches):
+  # rounds of Google + OpenRouter web searches for recruiter posts with HR emails. After each round
+  # Gemini / Groq / OpenRouter write new search phrases from the posts that had an HR email; it stops
+  # when a round finds none. HR emails are only ever taken from the post's own text.
+  # web_searches cost ~$0.007 each from OpenRouter credit and use its 50 free requests/day.
+  ai_search: {enabled: true, web_searches: 15, max_rounds: 4, results: 10,
+              web_model: "nvidia/nemotron-3-super-120b-a12b:free"}
   # Official public job-board APIs of companies that hire through Greenhouse / Lever / Ashby.
   # These are original postings with exact timestamps and standard forms the bot can fill.
   # Defaults verified live on 2026-10-07: each board answered its public API and had

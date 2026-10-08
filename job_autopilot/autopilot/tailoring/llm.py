@@ -70,8 +70,16 @@ Hard rules:
 5. Bullets: one sentence each, at most 40 words, starting with a strong past-tense verb. Keep a bullet's "Label:" prefix only if it still fits.
 6. Return every source bullet of every role exactly once, ordered within its role from most to least relevant to the posting.
 7. Summary: 2-3 sentences, at most 70 words, aimed at this posting.
-8. Cover note: a plain-text email body of 110-170 words in 3 short paragraphs. Start with "Dear Hiring Team," or "Dear Hiring Team at <Company>," when the company is known. Name the role, give two or three matching achievements from the resume, and state availability: {notice}. No subject line, sign-off, signature or placeholders - the signature is added automatically.
-9. email_subject: under 90 characters, naming the role and the candidate ({name}).
+8. Cover note: a short, plain-text email body a busy recruiter can read in 20 seconds, 70-150 words, in this shape:
+   - "Dear Hiring Team," or "Dear Hiring Team at <Company>," when the company is known;
+   - one sentence: the role being applied for, and the candidate's {years} years in DevOps / cloud;
+   - a line "What I bring for this role:" followed by exactly 3 lines starting with "- ", each pairing one
+     requirement from this posting with one matching achievement from the master resume (keep its numbers exact);
+   - one sentence: availability ({notice}) and that the resume is attached;
+   - one short closing sentence inviting a quick call.
+   Simple words, no buzzwords, no "I am excited/passionate". No subject line, sign-off, signature or
+   placeholders - the signature is added automatically.
+9. email_subject: under 90 characters, in the form "Application for <role> - {name} | {years} yrs DevOps & Cloud | <availability>".
 
 <master_resume>
 {resume}

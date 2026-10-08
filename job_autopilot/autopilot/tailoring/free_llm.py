@@ -10,6 +10,7 @@ used; a rejected key switches that provider off for the run.
 from __future__ import annotations
 
 import json
+from collections import Counter
 import os
 import re
 import time
@@ -32,9 +33,10 @@ OPENAI_URL = {"groq": "https://api.groq.com/openai/v1/chat/completions",
 
 STYLE = """
 
-The candidate's own application email is below. Keep its voice, structure and availability statement
-when writing cover_note, adapt it to this posting, fix any spelling, and keep only facts that are also in
-the master resume:
+The candidate's own application email is below. Keep its greeting, its voice and its availability
+statement, but write cover_note in the short shape of rule 8 (role line, 3 "- " bullets matched to this
+posting, availability + resume attached, call to action), fix any spelling, and keep only facts that are
+also in the master resume:
 <usual_email>
 {template}
 </usual_email>"""
@@ -190,3 +192,57 @@ class FreeLLMChain:
 
     def tailor(self, job: Job, company_known: bool) -> dict:
         return self.drafts(job, company_known, want=1)[0][1]
+
+
+class QuickLLM:
+    """Small JSON questions for the job search itself (new search phrases, reading a recruiter
+    post) - Gemini first, then Groq, then OpenRouter, whichever answers. Never used for facts
+    that reach a recruiter unchecked: every answer is verified against the source text."""
+
+    def __init__(self, settings: Settings, log=print):
+        self.log = log
+        configured = settings.get("tailoring.providers", DEFAULT_PROVIDERS) or DEFAULT_PROVIDERS
+        self.providers = [p for p in configured if os.getenv(KEY_ENV.get(p["name"], ""))]
+        self.cool_until: dict[str, float] = {}
+        self.calls = Counter()
+
+    def __bool__(self) -> bool:
+        return bool(self.providers)
+
+    def _call(self, provider: str, model: str, prompt: str) -> str:
+        if provider == "gemini":
+            r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                              headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, timeout=120,
+                              json={"contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                                    "generationConfig": {"responseMimeType": "application/json", "temperature": 0.7}})
+            FreeLLMChain._raise_for(r)
+            cand = (r.json().get("candidates") or [{}])[0]
+            return "".join(p.get("text", "") for p in (cand.get("content") or {}).get("parts", []) if not p.get("thought"))
+        headers = {"Authorization": f"Bearer {os.environ[KEY_ENV[provider]]}"}
+        r = requests.post(OPENAI_URL[provider], headers=headers, timeout=120,
+                          json={"model": model, "temperature": 0.7, "response_format": {"type": "json_object"},
+                                "messages": [{"role": "user", "content": prompt}]})
+        FreeLLMChain._raise_for(r)
+        return ((r.json().get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+
+    def json(self, prompt: str) -> dict | None:
+        for provider in self.providers:
+            name = provider["name"]
+            if self.cool_until.get(name, 0) > time.time():
+                continue
+            for model in provider["models"]:
+                try:
+                    text = self._call(name, model, prompt)
+                    match = re.search(r"\{.*\}", text, re.S)
+                    data = json.loads(match.group(0) if match else text)
+                except _Fatal:
+                    self.cool_until[name] = time.time() + 10 ** 6     # key rejected: off for this run
+                    break
+                except (_Retryable, ValueError, requests.RequestException):
+                    continue
+                if isinstance(data, dict):
+                    self.calls[f"{name}:{model}"] += 1
+                    return data
+            else:
+                self.cool_until[name] = time.time() + 60
+        return None

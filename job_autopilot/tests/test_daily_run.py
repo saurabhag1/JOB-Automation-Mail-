@@ -119,3 +119,70 @@ def test_resolve_routes_updates_job_and_database(settings, db, monkeypatch):
     assert resolve.resolve_routes([job], settings, db, log=lambda *a: None) == 1
     row = db.job_row(job.id)
     assert row["apply_type"] == APPLY_GREENHOUSE and "token=1" in row["apply_url"]
+
+
+# --------------------------------------------------------------------------- AI search rounds
+from autopilot.discovery import ai_search  # noqa: E402
+
+
+class FakeLLM:
+    """Answers expand_queries / read_posts prompts with canned JSON."""
+
+    def __init__(self, posts=None):
+        self.prompts, self.posts = [], posts or []
+        self.calls = Counter()
+
+    def __bool__(self):
+        return True
+
+    def json(self, prompt):
+        self.prompts.append(prompt)
+        if "Write" in prompt and "search phrases" in prompt:
+            n = len([p for p in self.prompts if "search phrases" in p])
+            return {"queries": [f"SRE hiring Pune immediate joiners round{n}", "site:linkedin.com bad", '"x"',
+                                "Cloud Engineer 3+ years Hyderabad share CV"]}
+        return {"posts": self.posts}
+
+
+def test_ai_search_rounds_stop_when_dry_and_never_trust_llm_emails(settings, monkeypatch):
+    settings.data["sources"]["ai_search"] = {"enabled": True, "web_searches": 6, "max_rounds": 5}
+    monkeypatch.setenv("OPENROUTER_API_KEY", "x")
+    monkeypatch.setattr(ai_search.gs, "available_providers", lambda: [])
+    pages = iter(range(1000))
+
+    def fake_web(query, settings, sess):
+        n = next(pages)
+        if n >= 2:                      # round 1 runs 2 searches; from round 2 on nothing new turns up
+            return []
+        return [{"link": f"https://www.linkedin.com/posts/hr-{n}_hiring-activity-{n}",
+                 "title": "Hiring DevOps Engineer | Pune", "date": "2026-10-06",
+                 "snippet": f"We are hiring a DevOps Engineer, 2-4 years, AWS and Kubernetes. "
+                            f"Share your resume at hr{n}@acme{n}.com"}]
+
+    monkeypatch.setattr(ai_search, "web_search", fake_web)
+    monkeypatch.setattr(ai_search.gs, "_page_text", lambda sess, url: "")
+    llm = FakeLLM(posts=[{"i": 0, "title": "DevOps Engineer", "company": "Invented Corp",
+                          "experience": "2-4 years", "hiring": True}])
+    monkeypatch.setattr("autopilot.tailoring.free_llm.QuickLLM", lambda settings, log: llm)
+
+    jobs = ai_search.collect(settings, log=lambda *a: None)
+    assert sorted(j.hr_email for j in jobs) == ["hr0@acme0.com", "hr1@acme1.com"]
+    assert all(j.company != "Invented Corp" for j in jobs)          # not in the post text -> ignored
+    assert jobs[0].experience_text == "2-4 years"                    # in the post text -> used
+    phrase_prompts = [p for p in llm.prompts if "search phrases" in p]
+    assert len(phrase_prompts) == 1                                  # round 2 found nothing new -> stopped
+
+
+def test_expand_queries_cleans_llm_output():
+    out = ai_search.expand_queries(FakeLLM(), ["DevOps Engineer"], ["Pune"], 3,
+                                   used=["Cloud Engineer 3+ years Hyderabad share CV"], examples=[], n=5)
+    assert out == ["SRE hiring Pune immediate joiners round1", "linkedin.com bad"] or \
+        out == ["SRE hiring Pune immediate joiners round1"]
+    assert all("site:" not in q and '"' not in q for q in out)
+
+
+def test_not_hiring_posts_are_flagged():
+    job = make_job(source="ai-web:linkedin.com", hr_email="info@training.example",
+                   description="New batches starting this week, limited seats. DevOps course. info@training.example")
+    ai_search.read_posts(FakeLLM(posts=[{"i": 0, "title": "DevOps course", "hiring": False}]), [job], log=lambda *a: None)
+    assert job.title.endswith("[not a hiring post]")

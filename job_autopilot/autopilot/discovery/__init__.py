@@ -10,7 +10,7 @@ from autopilot.models import Job
 
 
 def discover(settings: Settings, log=print) -> list[Job]:
-    from autopilot.discovery import ats_boards, boards, google_search, local_files, remote_feeds
+    from autopilot.discovery import ai_search, ats_boards, boards, google_search, local_files, remote_feeds
 
     tasks = {}
     for site in boards.SITES:
@@ -18,7 +18,10 @@ def discover(settings: Settings, log=print) -> list[Job]:
             tasks[site] = lambda site=site: boards.collect(site, settings, log)
     if settings.get("sources.ats_boards.enabled", False):
         tasks["ats"] = lambda: ats_boards.collect(settings, log)
-    if settings.get("sources.google_search.enabled", False):
+    if settings.get("sources.ai_search.enabled", False):
+        # Google + OpenRouter web search in rounds, with AI-written follow-up searches.
+        tasks["ai-search"] = lambda: ai_search.collect(settings, log)
+    elif settings.get("sources.google_search.enabled", False):
         tasks["google"] = lambda: google_search.collect(settings, log)
     if settings.get("sources.remote_feeds.enabled", False):
         tasks["remote-feeds"] = lambda: remote_feeds.collect(settings, log)

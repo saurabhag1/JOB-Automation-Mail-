@@ -29,6 +29,22 @@ def slug(text: str, limit: int = 32) -> str:
     return (re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-") or "x")[:limit]
 
 
+def _paragraph_html(para: str) -> str:
+    """A paragraph; its "- " lines become a real bullet list."""
+    out, items = [], []
+    for line in para.strip().split("\n"):
+        if re.match(r"^\s*[-•*]\s+", line):
+            items.append(f"<li>{_html.escape(re.sub(r'^\s*[-•*]\s+', '', line))}</li>")
+            continue
+        if items:
+            out.append(f'<ul style="margin:4px 0 10px 18px;padding:0">{"".join(items)}</ul>')
+            items = []
+        out.append(f"<p style=\"margin:0 0 10px\">{_html.escape(line)}</p>")
+    if items:
+        out.append(f'<ul style="margin:4px 0 10px 18px;padding:0">{"".join(items)}</ul>')
+    return "".join(out)
+
+
 @dataclass
 class Package:
     job_id: str
@@ -49,8 +65,7 @@ class Package:
 
     @property
     def email_html(self) -> str:
-        body = "".join(f"<p>{_html.escape(p).replace(chr(10), '<br>')}</p>"
-                       for p in self.cover_note.split("\n\n") if p.strip())
+        body = "".join(_paragraph_html(p) for p in self.cover_note.split("\n\n") if p.strip())
         sig = _html.escape(self.signature).replace("\n", "<br>")
         return f'<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5">{body}<p>{sig}</p></div>'
 
@@ -199,7 +214,7 @@ class Tailor:
         llm_note = _SIGN_OFF.sub("", (data.get("cover_note") or "").strip()).strip()
         context = f"{self.resume_all}\n{job.title}\n{job.company}\n{job.location}\n{job.description}"
         issues = guard.problems(llm_note, self.resume_all, self.resume_all, context, years, self.units)
-        if not issues and 60 <= len(llm_note.split()) <= 260:
+        if not issues and 50 <= len(llm_note.split()) <= 200:
             note = llm_note
         else:
             notes.append("kept rule-based cover note: " + "; ".join(issues or ["length"]))

@@ -62,6 +62,28 @@ job_runs/2026-10-08_12-20-PM_IST/
 - With no LLM reachable, the rule-based tailoring still runs.
 - If `ANTHROPIC_API_KEY` is set, Claude is used instead (`tailoring.llm: auto`).
 
+## AI search: more HR emails each run
+
+`sources.ai_search` runs the search in rounds:
+
+1. **Round 1** runs the planned Google searches (past week) across the portals, plus recruiter-post searches through OpenRouter's web search, which is strong on LinkedIn "share your resume at …" posts.
+2. **After each round,** Gemini, Groq or OpenRouter (whichever answers) reads the posts that had an HR email and writes new search phrases in the same style. It varies titles, cities, "immediate joiner", "C2H", "3+ years" and so on.
+3. **It stops** when a round finds no new HR email, or when the budget is spent: `max_rounds`, `web_searches` and `google_search.max_searches`.
+
+**What is checked:**
+- HR emails, companies and titles come **only from the post's own text**. Whatever an LLM says about a post is used only where those words are in the post.
+- The LLM also flags training-course ads, job-seeker posts and multi-role lists, and they are dropped.
+- LinkedIn posts are dated exactly from their post id. Anything older than this week is skipped.
+
+**Cost:** each OpenRouter web search costs about $0.007 from your OpenRouter credit (15 a day is about $0.10) and uses one of the account's 50 free requests a day.
+
+**The email** is short and built to get a reply:
+- a role line;
+- "What I bring for this role:" with three bullets, each pairing a requirement from the posting with one of your achievements (exact numbers);
+- immediate joiner, resume attached, an invitation to a short call.
+
+It's 70–150 words, and the subject reads "Application for <role> - <name> | 3 yrs DevOps & Cloud | Immediate".
+
 ## Every day by itself (GitHub Actions)
 
 `.github/workflows/daily-job-autopilot.yml` runs the whole thing at **11:00 AM IST every day**. You can also start it yourself, either from **Actions → Daily Job Autopilot → Run workflow** (tick *dry_run* for a preview) or with `gh workflow run daily-job-autopilot.yml`.

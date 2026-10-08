@@ -143,6 +143,21 @@ def _age(text: str) -> datetime | None:
     return to_datetime(text)
 
 
+_LI_ACTIVITY = re.compile(r"(?:activity[-:]|urn:li:(?:activity|share|ugcPost):)(\d{18,20})")
+
+
+def linkedin_post_date(url: str) -> datetime | None:
+    """The exact time a LinkedIn post was published: its activity id's top bits are a ms timestamp."""
+    m = _LI_ACTIVITY.search(url or "")
+    if not m:
+        return None
+    try:
+        dt = datetime.fromtimestamp((int(m.group(1)) >> 22) / 1000, timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None
+    return dt if datetime(2015, 1, 1, tzinfo=timezone.utc) < dt <= datetime.now(timezone.utc) + timedelta(days=1) else None
+
+
 def _page_text(sess, url: str) -> str:
     try:
         r = sess.get(url, timeout=12)
@@ -190,7 +205,8 @@ def _to_job(group: str, place: str, role: str, item: dict, text: str) -> Job | N
         location=place if place.lower() != "remote" else "Remote", description=body[:15000],
         apply_type=APPLY_EMAIL if hr_email and apply_type == APPLY_EXTERNAL else apply_type,
         apply_url=apply_url or url, hr_email=hr_email, alt_emails=alternates,
-        date_posted=_age(str(item.get("date") or item.get("date_utc") or "")), date_trusted=True,
+        date_posted=linkedin_post_date(url) or _age(str(item.get("date") or item.get("date_utc") or "")),
+        date_trusted=True,
         is_remote=place.lower() == "remote" or "remote" in body[:3000].lower(),
         country=detect_country(place) if place.lower() != "remote" else "",
     )
