@@ -62,6 +62,17 @@ job_runs/2026-10-08_12-20-PM_IST/
 - With no LLM reachable, the rule-based tailoring still runs.
 - If `ANTHROPIC_API_KEY` is set, Claude is used instead (`tailoring.llm: auto`).
 
+## Every day by itself (GitHub Actions)
+
+`.github/workflows/daily-job-autopilot.yml` runs the whole thing at **11:00 AM IST every day**. You can also start it yourself, either from **Actions → Daily Job Autopilot → Run workflow** (tick *dry_run* for a preview) or with `gh workflow run daily-job-autopilot.yml`.
+
+- It emails every fitting HR address it found, up to `apply.email.max_per_run` (50), from your Gmail.
+- It submits Greenhouse / Lever / Ashby forms.
+- It **emails the report to you**: the Excel file, the summary, `APPLY_MANUALLY.zip` and the log.
+- The repo is public, so nothing personal is committed, and the Actions page shows counts only.
+- The "already emailed" history is kept in the Actions cache, so nobody is mailed twice.
+- Every secret is optional: a missing one shows a warning and the run continues without that part. The secrets are listed at the top of the workflow file.
+
 ---
 
 ## 1. How it works

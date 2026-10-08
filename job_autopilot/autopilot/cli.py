@@ -10,7 +10,7 @@
   status     what has happened so far
   report     write the HTML report and CSV export
   login      sign in to linkedin or naukri once, in the bot's browser
-  vault      save / load / status of the encrypted copy used by the daily GitHub run
+  mail-report  email the latest run's report + APPLY_MANUALLY files to yourself
 """
 
 from __future__ import annotations
@@ -182,17 +182,6 @@ def cmd_doctor(args) -> int:
     log(f"{good}existing GitHub-Actions mail lists: {len(existing_pipeline_addresses(settings))} addresses will not be re-mailed")
     channels = settings.get("apply.channels", [])
     log(f"{good}channels enabled: {', '.join(channels)}")
-    from autopilot import vault
-
-    if not vault.VAULT.exists():
-        log("  ..  vault: none yet - the daily GitHub run needs it (python3 job_hunt.py vault save)")
-    else:
-        try:
-            names = [m.name for m in vault.members()]
-            log(f"{good}vault: {vault.VAULT.name} opens with AUTOPILOT_VAULT_KEY ({', '.join(names)})")
-        except vault.VaultError as exc:
-            log(f"{bad}vault: {exc}")
-            ok = False
     return 0 if ok else 1
 
 
@@ -407,25 +396,16 @@ def cmd_login(args) -> int:
     return 0 if ok else 1
 
 
-def cmd_vault(args) -> int:
+def cmd_mail_report(args) -> int:
     load_env()
-    from autopilot import vault
+    settings = load_settings()
+    from autopilot.report_mail import latest_run, send
 
-    try:
-        if args.action == "save":
-            packed = vault.save()
-            print(f"Saved {', '.join(packed)} -> {vault.VAULT} (encrypted). Commit and push it so the daily "
-                  "GitHub run uses them:\n  git add job_autopilot/vault/private.bin && git commit -m 'update vault' "
-                  "&& git push")
-        elif args.action == "load":
-            restored = vault.load(force=args.force)
-            print(f"Restored: {', '.join(restored)}" if restored else "Nothing newer in the vault - local files kept.")
-        else:
-            return vault.status()
-    except vault.VaultError as exc:
-        print(f"! {exc}")
+    run_dir = Path(args.run_dir) if args.run_dir else latest_run(settings.path("paths.runs", "../job_runs"))
+    if run_dir is None or not run_dir.exists():
+        print("No run folder to report.")
         return 1
-    return 0
+    return 0 if send(run_dir) else 1
 
 
 def main(argv=None) -> int:
@@ -477,10 +457,9 @@ def main(argv=None) -> int:
     p.add_argument("site", choices=["linkedin", "naukri"])
     p.set_defaults(fn=cmd_login)
 
-    p = sub.add_parser("vault", help="encrypted copy of profile/resume/database for the daily GitHub run")
-    p.add_argument("action", choices=["save", "load", "status"])
-    p.add_argument("--force", action="store_true", help="load: replace local files even if they are newer")
-    p.set_defaults(fn=cmd_vault)
+    p = sub.add_parser("mail-report", help="email the latest run's report to yourself")
+    p.add_argument("--run-dir", help="a run folder (default: the newest in job_runs/)")
+    p.set_defaults(fn=cmd_mail_report)
 
     args = parser.parse_args(argv)
     try:

@@ -136,9 +136,11 @@ def test_run_folder_contents(tmp_path):
 
 def test_google_plan_and_parsing(settings):
     queries = google_search.plan_queries(settings)
-    assert len(queries) == 12
+    budget = settings.get("sources.google_search.max_searches")
+    assert len(queries) == budget
     groups = [g for g, _, _ in queries]
-    assert groups.count("recruiter_posts") == 6 and "india" in groups and "gulf_asia" in groups
+    # Half the budget goes to recruiter posts ("share your resume at ..."), the source of HR emails.
+    assert groups.count("recruiter_posts") == budget // 2 and "india" in groups and "gulf_asia" in groups
     assert all('"' in q and "site:" in q for _, _, q in queries)
     post = {"link": "https://www.linkedin.com/posts/megha-hr_hiring-devops-activity-1234567890",
             "title": "Megha S. on LinkedIn: We're hiring a DevOps Engineer!", "date": "2 days ago",

@@ -1,20 +1,14 @@
-"""The pieces the daily scheduled run depends on: the APPLY_MANUALLY folder, the
-employer-form finder and the encrypted vault (with its no-one-mailed-twice merge)."""
+"""The pieces the daily scheduled run depends on: the APPLY_MANUALLY folder and the
+employer-form finder."""
 
-import sqlite3
 from collections import Counter
 from types import SimpleNamespace
 
-import pytest
 from conftest import make_job
 
-from autopilot import vault
-from autopilot.db import Database
 from autopilot.discovery import resolve
 from autopilot.models import APPLY_ASHBY, APPLY_GREENHOUSE, APPLY_LINKEDIN_OFFSITE
 from autopilot.runlog import MANUAL_DIR, RunFolder, prune_old_runs
-
-KEY = "a-test-passphrase-123456"
 
 
 # --------------------------------------------------------------------------- APPLY_MANUALLY
@@ -125,83 +119,3 @@ def test_resolve_routes_updates_job_and_database(settings, db, monkeypatch):
     assert resolve.resolve_routes([job], settings, db, log=lambda *a: None) == 1
     row = db.job_row(job.id)
     assert row["apply_type"] == APPLY_GREENHOUSE and "token=1" in row["apply_url"]
-
-
-# --------------------------------------------------------------------------- vault
-def _private_files(root, email="hr@example.com", when="2026-10-01T00:00:00+00:00"):
-    (root / "data").mkdir(parents=True, exist_ok=True)
-    (root / "profile.yaml").write_text("name: Saurabh\n", encoding="utf-8")
-    (root / "data" / "master_resume.json").write_text("{}", encoding="utf-8")
-    database = Database(root / "data" / "autopilot.db")
-    database.conn.execute("INSERT INTO contacts (email, last_contacted, job_id, times) VALUES (?, ?, 'j', 1)",
-                          (email, when))
-    database.conn.commit()
-    database.close()
-
-
-def _contacts(path):
-    con = sqlite3.connect(str(path))
-    try:
-        return dict(con.execute("SELECT email, last_contacted FROM contacts").fetchall())
-    finally:
-        con.close()
-
-
-def test_vault_round_trip_and_wrong_key(tmp_path):
-    mac, cloud = tmp_path / "mac", tmp_path / "cloud"
-    _private_files(mac)
-    assert vault.save(mac, secret=KEY) == list(vault.FILES)
-    blob = (mac / "vault" / "private.bin").read_bytes()
-    assert b"Saurabh" not in blob and b"hr@example.com" not in blob          # nothing readable in the repo
-    cloud.mkdir()
-    (cloud / "vault").mkdir()
-    (cloud / "vault" / "private.bin").write_bytes(blob)
-    assert sorted(vault.load(cloud, secret=KEY)) == sorted(vault.FILES)
-    assert (cloud / "profile.yaml").read_text(encoding="utf-8") == "name: Saurabh\n"
-    assert _contacts(cloud / "data" / "autopilot.db") == {"hr@example.com": "2026-10-01T00:00:00+00:00"}
-    with pytest.raises(vault.VaultError, match="wrong"):
-        vault.load(cloud, secret="another-passphrase-0000", force=True)
-
-
-def test_vault_never_forgets_a_contact(tmp_path):
-    """Mac and cloud both mailed people: whichever database wins, both contacts survive."""
-    cloud, mac = tmp_path / "cloud", tmp_path / "mac"
-    _private_files(cloud, "cloud-hr@example.com")
-    vault.save(cloud, secret=KEY)
-    _private_files(mac, "mac-hr@example.com")
-    (mac / "vault").mkdir()
-    (mac / "vault" / "private.bin").write_bytes((cloud / "vault" / "private.bin").read_bytes())
-
-    # Mac's database is newer: it is kept, and the cloud's contact is merged in.
-    restored = vault.load(mac, secret=KEY)
-    assert "data/autopilot.db (merged into yours)" in restored
-    assert set(_contacts(mac / "data" / "autopilot.db")) == {"cloud-hr@example.com", "mac-hr@example.com"}
-
-    # Vault's database is newer: it replaces the Mac's, which is kept as .bak and merged in.
-    import os
-
-    _private_files(mac, "only-on-mac@example.com")
-    os.utime(mac / "data" / "autopilot.db", (0, 0))
-    assert "data/autopilot.db" in vault.load(mac, secret=KEY)
-    assert (mac / "data" / "autopilot.db.bak").exists()
-    assert set(_contacts(mac / "data" / "autopilot.db")) >= {"cloud-hr@example.com", "only-on-mac@example.com"}
-
-
-def test_vault_ignores_unknown_paths(tmp_path):
-    import io
-    import tarfile
-
-    buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w") as tar:
-        info = tarfile.TarInfo("../evil.txt")
-        info.size = 3
-        tar.addfile(info, io.BytesIO(b"bad"))
-    import gzip
-    import os
-
-    salt = os.urandom(16)
-    token = vault._fernet(KEY, salt).encrypt(gzip.compress(buf.getvalue()))
-    (tmp_path / "vault").mkdir()
-    (tmp_path / "vault" / "private.bin").write_bytes(vault.MAGIC + salt + token)
-    assert vault.load(tmp_path, secret=KEY) == []
-    assert not (tmp_path.parent / "evil.txt").exists()

@@ -5,9 +5,7 @@
     python3 job_hunt.py --dry-run    do everything except sending (check the output first)
     python3 job_hunt.py --review     the browser fills forms, you press Submit yourself
     python3 job_hunt.py --unattended never stop to ask (for cron); stuck jobs are listed instead
-    python3 job_hunt.py vault save   after editing profile.yaml / answering questions: share them with
-                                     the daily GitHub run (.github/workflows/daily-job-autopilot.yml)
-    python3 job_hunt.py <command>    any autopilot command: doctor, status, answers, vault, login ...
+    python3 job_hunt.py <command>    any autopilot command: doctor, status, answers, mail-report ...
 
 Each run:
   1. searches LinkedIn, Indeed, Naukri, Glassdoor, Bayt, 44 company job boards (Greenhouse /
@@ -36,7 +34,7 @@ HERE = Path(__file__).resolve().parent
 APP = HERE / "job_autopilot"
 VENV = APP / ".venv"
 VENV_PY = VENV / "bin" / "python"
-COMMANDS = ("init", "doctor", "discover", "apply", "run", "tailor", "answers", "status", "report", "login", "vault")
+COMMANDS = ("init", "doctor", "discover", "apply", "run", "tailor", "answers", "status", "report", "login", "mail-report")
 
 
 def main() -> int:
@@ -57,11 +55,6 @@ def main() -> int:
 
     if sys.argv[1:] and sys.argv[1] in COMMANDS:
         return cli(sys.argv[1:])
-    from autopilot import vault
-    from autopilot.config import load_env
-
-    load_env()
-    vault.auto_load()   # the daily GitHub run's newer database, so nobody is mailed twice
     if not (APP / "profile.yaml").exists() or not (APP / "data" / "master_resume.json").exists():
         cli(["init"])
     return cli(["run", *sys.argv[1:]])

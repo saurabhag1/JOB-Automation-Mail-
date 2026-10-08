@@ -1,0 +1,168 @@
+name: Daily Job Autopilot
+
+# Runs by itself at 11:00 AM IST every day, or on demand:
+#   Actions tab -> "Daily Job Autopilot" -> Run workflow        (or: gh workflow run daily-job-autopilot.yml)
+#
+# Each run: finds this week's DevOps / Cloud / SRE jobs (LinkedIn, Indeed, Naukri, Glassdoor, Bayt,
+# company boards, remote feeds, Google), keeps the genuine ones that fit, tailors your resume and your
+# usual email to each, EMAILS EVERY FITTING HR ADDRESS IT FOUND (up to 50 per run) from your Gmail and
+# submits Greenhouse / Lever / Ashby forms. The report - Excel, summary and APPLY_MANUALLY.zip with the
+# tailored resumes for jobs you must apply to yourself - is emailed to you.
+#
+# This repository is public, so nothing personal is committed or printed here: the console shows
+# counts only, the full log is in the report email, and the "already emailed" history is kept in
+# the Actions cache (only this repository's workflows can read it).
+#
+# Secrets (Settings -> Secrets and variables -> Actions -> New repository secret). Every one is
+# optional - a missing one is a warning and the run carries on without that part:
+#   EMAIL_ADDRESS, EMAIL_PASSWORD   Gmail + App Password: sends HR emails and your report   (already set)
+#   GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY   free LLMs that tailor resume + email (else rules)
+#   SERPER_KEY, SERPAPI_KEY, SCRAPERAPI_KEY, SCRAPINGDOG_KEY, SEARCHAPI_KEY   Google search  (already set)
+#   AUTOPILOT_PROFILE_YAML          the whole of job_autopilot/profile.yaml (notice period, CTC, ...)
+#                                   for application forms; without it, it is rebuilt from your resume
+#   AUTOPILOT_MASTER_RESUME_JSON    job_autopilot/data/master_resume.json if you edited it by hand
+#   REPORT_EMAIL                    where the report goes (default: EMAIL_ADDRESS)
+on:
+  schedule:
+    - cron: "30 5 * * *"      # 05:30 UTC = 11:00 AM IST, every day
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview only - build every email and resume, send nothing"
+        type: boolean
+        default: false
+      max_applications:
+        description: "Max applications this run (all channels)"
+        default: "60"
+
+concurrency:
+  group: job-autopilot
+  cancel-in-progress: false
+
+permissions:
+  contents: read             # the run commits nothing
+
+jobs:
+  autopilot:
+    name: Find jobs, email HR, apply, report
+    runs-on: ubuntu-latest
+    timeout-minutes: 170
+    env:
+      TZ: Asia/Kolkata
+      PYTHONUNBUFFERED: "1"
+      DRY_RUN: ${{ inputs.dry_run || 'false' }}
+      MAX_APPLICATIONS: ${{ inputs.max_applications || '60' }}
+      EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+      EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+      REPORT_EMAIL: ${{ secrets.REPORT_EMAIL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      SERPER_KEY: ${{ secrets.SERPER_KEY }}
+      SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+      SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
+      SCRAPINGDOG_KEY: ${{ secrets.SCRAPINGDOG_KEY }}
+      SEARCHAPI_KEY: ${{ secrets.SEARCHAPI_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: job_autopilot/requirements.txt
+
+      - name: Install the autopilot
+        run: |
+          python -m venv job_autopilot/.venv
+          job_autopilot/.venv/bin/pip install --quiet --upgrade pip
+          job_autopilot/.venv/bin/pip install --quiet -r job_autopilot/requirements.txt
+
+      - name: Cache the Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('job_autopilot/requirements.txt') }}
+
+      - name: Install Chromium (resume PDFs and application forms)
+        run: job_autopilot/.venv/bin/python -m playwright install --with-deps chromium
+
+      - name: Restore the "already emailed" history
+        uses: actions/cache/restore@v4
+        with:
+          path: job_autopilot/data/autopilot.db
+          key: autopilot-db-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: autopilot-db-
+
+      - name: Check secrets (missing ones only warn)
+        env:
+          AUTOPILOT_PROFILE_YAML: ${{ secrets.AUTOPILOT_PROFILE_YAML }}
+          AUTOPILOT_MASTER_RESUME_JSON: ${{ secrets.AUTOPILOT_MASTER_RESUME_JSON }}
+        run: |
+          warn() { echo "::warning::$1"; }
+          [ -n "$EMAIL_ADDRESS" ] && [ -n "$EMAIL_PASSWORD" ] \
+            || warn "EMAIL_ADDRESS / EMAIL_PASSWORD missing - HR emails and the report email are skipped; forms are still submitted."
+          [ -n "$GEMINI_API_KEY$GROQ_API_KEY$OPENROUTER_API_KEY" ] \
+            || warn "No GEMINI_API_KEY / GROQ_API_KEY / OPENROUTER_API_KEY - resumes are tailored by rules only."
+          [ -n "$SERPER_KEY$SERPAPI_KEY$SCRAPERAPI_KEY$SCRAPINGDOG_KEY$SEARCHAPI_KEY" ] \
+            || warn "No SERP keys - Google search (recruiter posts with HR emails) is skipped; job boards still run."
+          mkdir -p job_autopilot/data
+          if [ -n "$AUTOPILOT_PROFILE_YAML" ]; then
+            printf '%s\n' "$AUTOPILOT_PROFILE_YAML" > job_autopilot/profile.yaml
+            echo "profile.yaml: from the AUTOPILOT_PROFILE_YAML secret"
+          else
+            warn "No AUTOPILOT_PROFILE_YAML - profile.yaml is rebuilt from your resume (forms asking CTC are left for you)."
+          fi
+          if [ -n "$AUTOPILOT_MASTER_RESUME_JSON" ]; then
+            printf '%s\n' "$AUTOPILOT_MASTER_RESUME_JSON" > job_autopilot/data/master_resume.json
+            echo "master_resume.json: from the AUTOPILOT_MASTER_RESUME_JSON secret"
+          fi
+          if [ -f job_autopilot/data/autopilot.db ]; then
+            echo "History: restored from the previous run."
+          else
+            echo "History: none yet (first run, or the cache expired) - starting fresh."
+          fi
+
+      - name: Find jobs, tailor, email HR, submit forms
+        run: |
+          args=(--unattended --headless --max "$MAX_APPLICATIONS")
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          set +e
+          python3 job_hunt.py "${args[@]}" > "$RUNNER_TEMP/autopilot.log" 2>&1
+          status=$?
+          set -e
+          # The full log names recruiters and companies: it goes to your inbox, not to this public page.
+          grep -E "^(Found [0-9]+ postings|Kept [0-9]+|Employer forms found|Reached the per-run cap|Done:|LLM:|! |Traceback|[A-Za-z]+Error)" \
+            "$RUNNER_TEMP/autopilot.log" | sed -E 's/[[:alnum:]._%+-]+@[[:alnum:].-]+/<email>/g' || true
+          exit $status
+
+      - name: Save the "already emailed" history
+        if: always() && hashFiles('job_autopilot/data/autopilot.db') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: job_autopilot/data/autopilot.db
+          key: autopilot-db-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Email the report to you
+        if: always()
+        continue-on-error: true
+        run: |
+          RUN_DIR=$(ls -td job_runs/20*_IST*/ 2>/dev/null | head -1)
+          if [ -z "$RUN_DIR" ]; then echo "No run folder was written."; exit 0; fi
+          cp "$RUNNER_TEMP/autopilot.log" "${RUN_DIR%/}/run.log" || true
+          python3 job_hunt.py mail-report --run-dir "${RUN_DIR%/}" 2>&1 | sed -E 's/[[:alnum:]._%+-]+@[[:alnum:].-]+/<email>/g'
+
+      - name: Counts
+        if: always()
+        run: |
+          RUN_DIR=$(ls -td job_runs/20*_IST*/ 2>/dev/null | head -1)
+          [ -n "$RUN_DIR" ] || exit 0
+          {
+            echo "### Job Autopilot - $(basename "$RUN_DIR")"
+            grep -E '^- \*\*(Postings found|Jobs kept|HR emails found|Emails sent|Forms submitted|Jobs to apply by hand|Mode)' "$RUN_DIR"/*.md || true
+            echo
+            echo "Full report (Excel, APPLY_MANUALLY.zip, log) is in your email inbox."
+          } >> "$GITHUB_STEP_SUMMARY"
