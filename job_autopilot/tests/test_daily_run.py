@@ -186,3 +186,13 @@ def test_not_hiring_posts_are_flagged():
                    description="New batches starting this week, limited seats. DevOps course. info@training.example")
     ai_search.read_posts(FakeLLM(posts=[{"i": 0, "title": "DevOps course", "hiring": False}]), [job], log=lambda *a: None)
     assert job.title.endswith("[not a hiring post]")
+
+
+def test_not_sent_reasons_are_counted():
+    hr = [{"Status": s} for s in ("submitted 02:30 PM IST", "not sent: emailed 0 days ago", "not sent: emailed 3 days ago",
+                                  "not sent: already mailed by your GitHub Actions pipeline",
+                                  "not contacted: title not a DevOps/Cloud role",
+                                  "not contacted: asks for 7+ years (you have 3)", "queued (over this run's cap)")]
+    assert RunFolder.not_sent_reasons(hr) == Counter({
+        "already emailed by an earlier run (60-day gap)": 2, "already mailed by your GitHub Actions pipeline": 1,
+        "title not a DevOps/Cloud role": 1, "asks for more years than you have": 1, "queued": 1})

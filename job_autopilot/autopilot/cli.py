@@ -405,6 +405,17 @@ def cmd_mail_report(args) -> int:
     if run_dir is None or not run_dir.exists():
         print("No run folder to report.")
         return 1
+    if settings.db_path.exists():   # every application so far, so the newest report email is the full record
+        from autopilot.db import Database
+        from autopilot.runlog import RunFolder
+
+        db = Database(settings.db_path)
+        rows = [{"When (UTC)": a["created_at"], "Channel": a["channel"], "Status": a["status"],
+                 "Sent to / where": a["recipient"] or a["apply_url"] or a["url"], "Company": a["company"],
+                 "Job title": a["title"], "Location": a["location"], "Job post": a["url"], "Detail": a["detail"]}
+                for a in reversed(db.applications()) if a["status"] != "dry_run"]
+        db.close()
+        RunFolder._xlsx(run_dir / "all_applications_so_far.xlsx", {"All applications": rows})
     return 0 if send(run_dir) else 1
 
 

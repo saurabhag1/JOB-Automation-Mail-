@@ -139,7 +139,7 @@ class RunFolder:
         hr = self._hr_rows()
         rejected = [{"Job title": j.title, "Company": j.company, "Location": j.location, "Found on": j.source,
                      "Job post": j.url, "HR email": j.hr_email, "Why skipped": j.reject_reason} for j in self.rejected]
-        summary = [{"Item": k, "Value": v} for k, v in self._summary(stats, sources, len(hr)).items()]
+        summary = [{"Item": k, "Value": v} for k, v in self._summary(stats, sources, len(hr), hr).items()]
         sheets = {"Summary": summary, "Apply manually": self.manual, "Jobs": jobs, "HR Emails": hr,
                   "Sent": self.sent, "Rejected": rejected}
         for name, rows in (("jobs", jobs), ("hr_emails", hr), ("sent", self.sent), ("rejected", rejected),
@@ -153,7 +153,23 @@ class RunFolder:
         md.write_text(self._markdown(summary, jobs, hr), encoding="utf-8")
         return md
 
-    def _summary(self, stats: Counter, sources: Counter, hr_count: int) -> dict:
+    @staticmethod
+    def not_sent_reasons(hr: list[dict]) -> Counter:
+        """Why found HR addresses got no email, e.g. {'already emailed by an earlier run': 6}."""
+        out = Counter()
+        for row in hr:
+            status = row["Status"]
+            if status.startswith(("submitted", "dry_run")):
+                continue
+            reason = re.sub(r"^(not sent|not contacted):\s*", "", status)
+            reason = re.sub(r"\s*\d{1,2}:\d\d [AP]M IST$", "", reason)
+            reason = re.sub(r"^emailed \d+ days? ago$", "already emailed by an earlier run (60-day gap)", reason)
+            reason = re.sub(r"^asks for \d+\+ years.*", "asks for more years than you have", reason)
+            reason = re.sub(r"\s*\(.*\)$", "", reason) if not reason.startswith("already emailed") else reason
+            out[reason] += 1
+        return out
+
+    def _summary(self, stats: Counter, sources: Counter, hr_count: int, hr: list[dict] | None = None) -> dict:
         finished = ist_now()
         out = {
             "Run started (IST)": self.started.strftime("%d %b %Y %I:%M %p"),
@@ -167,6 +183,8 @@ class RunFolder:
             "Forms submitted by the bot": sum(1 for r in self.sent if r["Channel"] != "email"
                                               and r["Status"] in ("submitted", "submitted_unconfirmed")),
             "Jobs to apply by hand (APPLY_MANUALLY)": len(self.manual),
+            "HR emails not sent, why": "; ".join(f"{r} {n}" for r, n in self.not_sent_reasons(hr or []).most_common())
+                                       or "none",
             "Applications by result": ", ".join(f"{k} {v}" for k, v in sorted(stats.items())) or "none",
         }
         out.update({k: v for k, v in self.info.items()})

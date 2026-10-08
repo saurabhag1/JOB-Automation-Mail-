@@ -5,8 +5,8 @@ the folder comes to your inbox instead:
 
     Subject: Job Autopilot 09 Oct 11:00 AM IST - 14 HR emails sent, 2 forms, 18 to apply by hand
     Body:    the run summary (where every application went, what to apply to by hand)
-    Files:   <run>.xlsx (all sheets), <run>.md, APPLY_MANUALLY.zip (tailored resumes to apply
-             by hand), run.log
+    Files:   <run>.xlsx (all sheets), all_applications_so_far.xlsx (every application ever made),
+             <run>.md, APPLY_MANUALLY.zip (tailored resumes to apply by hand), run.log
 
 Sent to REPORT_EMAIL if set, else to EMAIL_ADDRESS (the account that sends).
 """

@@ -162,7 +162,8 @@ jobs:
           [ -n "$RUN_DIR" ] || exit 0
           {
             echo "### Job Autopilot - $(basename "$RUN_DIR")"
-            grep -E '^- \*\*(Postings found|Jobs kept|HR emails found|Emails sent|Forms submitted|Jobs to apply by hand|Mode)' "$RUN_DIR"/*.md || true
+            grep -E '^- \*\*(Postings found|Jobs kept|HR emails found|Emails sent|HR emails not sent|Forms submitted|Jobs to apply by hand|Mode)' "$RUN_DIR"/*.md || true
             echo
-            echo "Full report (Excel, APPLY_MANUALLY.zip, log) is in your email inbox."
+            echo "Full report (Excel, APPLY_MANUALLY.zip, all_applications_so_far.xlsx, log) is in your email inbox."
+            echo "Every email that was sent is also in Gmail -> Sent."
           } >> "$GITHUB_STEP_SUMMARY"
