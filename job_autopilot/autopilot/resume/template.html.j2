@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ r.name }} - Resume</title>
+<style>
+  @page { size: A4; margin: {{ "10mm 12mm" if compact else "12mm 14mm" }}; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: #161616;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: {{ "9.1pt" if compact else "9.6pt" }}; line-height: {{ 1.27 if compact else 1.33 }};
+  }
+  a { color: #1a56db; text-decoration: none; }
+  h1 { text-align: center; font-size: 19pt; margin: 0 0 3px; letter-spacing: .01em; }
+  .contact { text-align: center; font-size: 8.7pt; color: #303030; }
+  .contact span + span::before { content: " | "; color: #888; }
+  .headline { text-align: center; font-weight: 700; margin-top: 7px; font-size: 9.8pt; }
+  .tagline { text-align: center; font-weight: 600; font-size: 9.2pt; color: #303030; }
+  h2 {
+    font-size: 9.8pt; text-transform: uppercase; letter-spacing: .07em; text-align: center;
+    border-top: 2px solid #5b8fd6; padding-top: 4px; margin: 9px 0 5px; break-after: avoid;
+  }
+  p.summary { margin: 0; text-align: justify; }
+  ul { margin: 2px 0 6px 0; padding-left: 17px; }
+  li { margin: 1.5px 0; break-inside: avoid; }
+  .row { display: flex; justify-content: space-between; gap: 12px; font-weight: 700; break-after: avoid; }
+  .row .dates { white-space: nowrap; font-weight: 700; }
+  .role-title { font-weight: 600; font-style: italic; break-after: avoid; }
+  .block { margin-bottom: 5px; }
+  .tech { font-weight: 400; color: #444; }
+  strong.k { font-weight: 700; }
+</style>
+</head>
+<body>
+  <h1>{{ r.name }}</h1>
+  <div class="contact">
+    {% if r.contact.location %}<span>{{ r.contact.location }}</span>{% endif %}
+    {% if r.contact.email %}<span><a href="mailto:{{ r.contact.email }}">{{ r.contact.email }}</a></span>{% endif %}
+    {% if r.contact.phone %}<span>{{ r.contact.phone }}</span>{% endif %}
+  </div>
+  <div class="contact">
+    {% if r.contact.linkedin %}<span>LinkedIn: <a href="{{ r.contact.linkedin }}">{{ r.contact.linkedin | replace("https://www.", "") | replace("https://", "") }}</a></span>{% endif %}
+    {% if r.contact.github %}<span>GitHub: <a href="{{ r.contact.github }}">{{ r.contact.github | replace("https://", "") }}</a></span>{% endif %}
+    {% if r.contact.portfolio %}<span>Portfolio: <a href="{{ r.contact.portfolio }}">{{ r.contact.portfolio | replace("https://", "") }}</a></span>{% endif %}
+  </div>
+  {% if r.headline %}<div class="headline">{{ r.headline }}</div>{% endif %}
+  {% if r.tagline %}<div class="tagline">{{ r.tagline }}</div>{% endif %}
+
+  {% if r.summary %}
+  <h2>Professional Summary</h2>
+  <p class="summary">{{ r.summary_html }}</p>
+  {% endif %}
+
+  {% if r.skills %}
+  <h2>Technical Skills</h2>
+  <ul>
+    {% for group in r.skills %}
+    <li>{% if group.category %}<strong>{{ group.category }}:</strong> {% endif %}{{ group.items_html }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if r.experience %}
+  <h2>Work Experience</h2>
+  {% for role in r.experience %}
+  <div class="block">
+    <div class="row"><span>{{ role.org_line }}</span><span class="dates">{{ role.dates }}</span></div>
+    {% if role.title %}<div class="role-title">{{ role.title }}</div>{% endif %}
+    <ul>
+      {% for b in role.bullets %}<li>{{ b.html }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if r.projects %}
+  <h2>Projects</h2>
+  {% for p in r.projects %}
+  <div class="block">
+    <div class="row"><span>{{ p.name }}{% if p.tech %} <span class="tech">| {{ p.tech }}</span>{% endif %}</span></div>
+    <ul>
+      {% for b in p.bullets %}<li>{{ b.html }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if r.education %}
+  <h2>Education</h2>
+  {% for e in r.education %}
+  <div class="row"><span style="font-weight:400">{{ e.text }}</span><span class="dates">{{ e.dates }}</span></div>
+  {% endfor %}
+  {% endif %}
+
+  {% if r.certifications %}
+  <h2>Certifications</h2>
+  {% for c in r.certifications %}
+  <div class="row"><span>{{ c.text }}</span><span class="dates">{{ c.dates }}</span></div>
+  {% endfor %}
+  {% endif %}
+
+  {% if r.extras %}
+  <h2>Extracurricular Activities</h2>
+  {% for g in r.extras %}
+  <div class="block">
+    {% if g.title %}<div class="row"><span>{{ g.title }}</span></div>{% endif %}
+    <ul>{% for b in g.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+  </div>
+  {% endfor %}
+  {% endif %}
+</body>
+</html>

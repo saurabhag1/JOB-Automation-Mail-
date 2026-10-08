@@ -1,0 +1,3 @@
+# Local runs' reports stay local. The daily GitHub run (daily-job-autopilot.yml) commits its
+# own folder with `git add -f`, so those appear here after `git pull`.
+job_runs/

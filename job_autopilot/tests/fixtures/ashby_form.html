@@ -1,0 +1,46 @@
+<!doctype html>
+<!-- Replica of a jobs.ashbyhq.com application: field entries with label[for] marked required by
+     CSS class, yes/no as <button aria-pressed>, EEO radios in a fieldset whose title is a <label>. -->
+<html><head><meta charset="utf-8"><title>Ashby application</title>
+<style>.hidden-check{position:absolute;opacity:0;width:1px;height:1px}</style></head>
+<body>
+<div class="ashby-application-form-container">
+  <div class="ashby-application-form-field-entry"><label class="_heading _required ashby-a" for="_systemfield_name">Name</label>
+    <div><input name="_systemfield_name" id="_systemfield_name" required type="text"></div></div>
+  <div class="ashby-application-form-field-entry"><label class="_heading _required ashby-a" for="_systemfield_email">Email</label>
+    <div><input name="_systemfield_email" id="_systemfield_email" required type="email"></div></div>
+  <div class="ashby-application-form-field-entry"><label class="_heading _required ashby-a" for="_systemfield_resume">Resume</label>
+    <div><input id="_systemfield_resume" name="_systemfield_resume" type="file" style="display:none"></div></div>
+  <div class="ashby-application-form-field-entry"><label class="_heading _required" for="question_1">Will you require sponsorship to work in India?</label>
+    <div class="_yesno ashby-application-form-input-yesno">
+      <button type="button" aria-pressed="false" data-option="yes">Yes</button>
+      <button type="button" aria-pressed="false" data-option="no">No</button>
+      <input type="checkbox" class="hidden-check" tabindex="-1" name="question_1"></div></div>
+  <fieldset class="_fieldEntry"><label class="_heading" for="_systemfield_eeoc_gender">Gender</label>
+    <div class="_option"><span><input type="radio" id="g" name="g"></span><label for="g">Male</label></div>
+    <div class="_option"><span><input type="radio" id="g2" name="g"></span><label for="g2">Female</label></div>
+    <div class="_option"><span><input type="radio" id="g3" name="g"></span><label for="g3">Decline to self-identify</label></div>
+  </fieldset>
+  <button type="button" id="submit">Submit Application</button>
+</div>
+<script>
+  document.querySelectorAll('button[aria-pressed]').forEach(b => b.addEventListener('click', () => {
+    b.parentElement.querySelectorAll('button[aria-pressed]').forEach(x => x.setAttribute('aria-pressed', 'false'));
+    b.setAttribute('aria-pressed', 'true');
+    b.parentElement.querySelector('input').checked = b.dataset.option === 'yes';
+  }));
+  document.getElementById('submit').addEventListener('click', () => {
+    const pressed = document.querySelector('button[aria-pressed="true"]');
+    const data = {
+      name: document.getElementById('_systemfield_name').value,
+      email: document.getElementById('_systemfield_email').value,
+      resume: (document.getElementById('_systemfield_resume').files[0] || {}).name || '',
+      sponsorship: pressed ? pressed.textContent : '',
+      gender: (Array.from(document.querySelectorAll('input[name=g]')).find(r => r.checked) || {}).id || '',
+    };
+    if (!data.name || !data.email || !data.resume || !data.sponsorship) { alert('missing'); return; }
+    document.body.innerHTML = '<h1>Thank you for applying!</h1><pre id="submitted"></pre>';
+    document.getElementById('submitted').textContent = JSON.stringify(data);
+  });
+</script>
+</body></html>

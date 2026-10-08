@@ -1,0 +1,132 @@
+# Job Autopilot - behaviour settings.
+#
+# Your personal details and standard answers live in profile.yaml (git-ignored,
+# created by `python -m autopilot init`). Secrets live in .env.
+# Paths are relative to this folder.
+
+resume:
+  pdf: ../bulk_mail_sender/Saurabh_Agrawal_2026.pdf   # the master resume
+  master_json: data/master_resume.json                # parsed copy - review/edit it once
+  attachment_name: "{first}_{last}_Resume.pdf"         # file name recruiters see
+
+search:
+  # THE KEYWORDS: every search on every portal and on Google uses these role titles
+  # (rotated daily so each run covers new combinations). Edit freely.
+  keywords:
+    - DevOps Engineer
+    - Site Reliability Engineer
+    - Cloud Engineer
+    - AWS DevOps Engineer
+    - Platform Engineer
+    - Infrastructure Engineer
+    - MLOps Engineer
+    - DevSecOps Engineer
+    - Kubernetes Engineer
+  # A title must contain one of these (plain substring match, case-insensitive)...
+  title_include: [devops, dev ops, " sre", site reliability, reliability engineer, cloud, platform engineer,
+                  infrastructure, aws, kubernetes, mlops, devsecops, release engineer, build engineer]
+  # ...and none of these. Quoted entries keep their spaces: "intern " must not hit "internal".
+  title_exclude: [principal, director, head of, vice president, manager, "intern ", internship,
+                  trainee, fresher, "staff ", sales, presales, pre-sales, data engineer, data scientist,
+                  architect, frontend, front end, android, " ios ", salesforce, " sap ", dotnet, .net,
+                  java developer, support engineer, desktop support, pm, product owner, scrum master,
+                  business analyst, recruiter]
+  max_age_days: 7          # freshness: discard anything posted earlier than this
+  drop_undated: true       # strict: drop postings with no date unless the source filtered by date
+  experience_years: 3      # your experience
+  experience_stretch: 1    # still apply when a posting asks for up to this many more years
+  min_match: 0.30          # share of the posting's tech requirements you must cover (0-1)
+  avoid_companies: [iEnergizer, Ienegizer]   # never apply here (e.g. your current employer)
+  exclude_phrases: []      # drop postings that contain any of these phrases
+
+# Priority order: 1 = remote (open to you, ideally well paid), 2 = India, 3 = international hubs.
+locations:
+  remote:
+    enabled: true
+    min_annual_usd: 20000  # remote roles that advertise less are dropped; unadvertised pay is kept
+  india:
+    enabled: true
+    cities: [Pune, Bengaluru, Hyderabad, Mumbai, Noida, Gurugram, Delhi, Chennai]
+  international:
+    enabled: true
+    places: [Singapore, "Dubai, United Arab Emirates", Japan, Netherlands, Germany, United Kingdom]
+
+sources:
+  linkedin:  {enabled: true,  per_query: 20, max_queries: 8, enrich_limit: 60}
+  indeed:    {enabled: true,  per_query: 20, max_queries: 6}
+  naukri:    {enabled: true,  per_query: 25, max_queries: 6}
+  glassdoor: {enabled: true,  per_query: 15, max_queries: 3}
+  bayt:      {enabled: true,  per_query: 15, max_queries: 2}      # Gulf (Dubai/UAE)
+  # Google search, past week only, over ~30 portals and LinkedIn recruiter posts
+  # ("share your resume at ..."), using the SERP keys in job_lead_analyzer/.env.
+  # Each search spends 1 credit (Scrapingdog 5); the lead collector in GitHub Actions
+  # uses the same keys, so keep this modest.
+  google_search: {enabled: true, max_searches: 20}
+  # Official public job-board APIs of companies that hire through Greenhouse / Lever / Ashby.
+  # These are original postings with exact timestamps and standard forms the bot can fill.
+  # Defaults verified live on 2026-10-07: each board answered its public API and had
+  # DevOps/SRE/infra openings (most in India or remote). Add any company that hires
+  # through these systems - the token is the name in its job-board URL.
+  ats_boards:
+    enabled: true
+    greenhouse: [gitlab, okta, coinbase, samsara, zscaler, affirm, sentinellabs, grafanalabs, tailscale,
+                 mongodb, stripe, netskope, twilio, databricks, fivetran, airbnb, jfrog, chainguard,
+                 inmobi, razorpaysoftwareprivatelimited, elastic, canonical, cloudflare]
+    lever: [zeta, meesho, paytm]
+    ashby: [openai, cohere, clickhouse, replit, supabase, sarvam, notion, render, astronomer, anyscale,
+            perplexity, railway, airbyte, docker, temporal, sentry, 1password, plane]
+  remote_feeds: {enabled: true}   # Remotive, RemoteOK, Jobicy
+  # "Takeover" sources: let the autopilot send TAILORED mails to these HR leads.
+  # Turn one on only after removing the matching generic send from GitHub Actions,
+  # otherwise the same recruiter gets two emails.
+  hr_email_leads: {enabled: false, path: ../job_lead_analyzer/daily_job_leads.json}
+  pasted_jobs:    {enabled: false, path: "../bulk_mail_sender/Pasted text(1).txt"}
+
+tailoring:
+  # auto = Claude if ANTHROPIC_API_KEY is set, else the free models below; free | anthropic | none
+  llm: auto
+  # Free-tier models, tried in this order. Each job gets drafts from `best_of` different
+  # providers; the truth guard scores them and the cleanest draft is used.
+  providers:
+    - {name: gemini,     models: [gemini-3.8-flash, gemini-3.5-flash, gemini-flash-latest]}
+    - {name: groq,       models: [openai/gpt-oss-120b, qwen/qwen3.8-27b]}
+    - {name: openrouter, models: ["nvidia/nemotron-3-ultra-550b-a55b:free", "google/gemma-4-31b-it:free"]}
+  best_of: 2
+  email_template: ../bulk_mail_sender/template.html   # your email; adapted to each job
+  model: claude-opus-5-5    # used only when llm is anthropic / auto with a key
+  effort: medium
+  max_projects: 4
+  attach: tailored          # tailored | original
+  llm_for_manual: true      # also LLM-tailor the resumes in APPLY_MANUALLY (free models; rules if they're busy)
+
+apply:
+  channels: [email, ats]    # add linkedin and/or naukri after `python -m autopilot login <site>`
+  auto_submit: true         # false = fill everything, then wait for you to press Submit
+  max_applications: 60      # per run, all channels together
+  pause_seconds: [20, 45]   # random pause between applications
+  email:
+    max_per_run: 50         # every genuine, fitting HR email found in a run is sent (Gmail allows ~500/day)
+    recontact_after_days: 60
+    subject: "Application for {title} | {name} | {years}+ yrs DevOps & Cloud"
+    respect_existing_pipeline: true   # skip addresses your GitHub Actions mailers already contacted
+  ats:      {max_per_run: 10}
+  linkedin: {max_per_run: 10, follow_company: false}
+  naukri:   {max_per_run: 10}
+  # Jobs the bot can't submit go to job_runs/<run>/APPLY_MANUALLY/: this many get a tailored
+  # resume + cover letter there; the rest are listed with their link.
+  manual_max_per_run: 20
+  # LinkedIn "apply on company site" / careers-page jobs: look for the employer's own
+  # Greenhouse / Lever / Ashby form (title + location must match), so the bot applies itself.
+  find_ats_forms: {enabled: true, max_jobs: 60}
+
+browser:
+  channel: chrome           # chrome = your installed Google Chrome; chromium = Playwright's build
+  headless: false
+  profile_dir: data/browser-profile
+  slow_mo_ms: 40
+
+paths:
+  db: data/autopilot.db
+  output: output
+  runs: ../job_runs         # one folder per run, named with the IST date and time
+  keep_files_days: 30       # older run folders keep their reports; their PDFs/emails/screenshots are deleted

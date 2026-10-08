@@ -1,0 +1,59 @@
+<!doctype html>
+<!-- Replica of the job-boards.greenhouse.io application form structure
+     (ids = API field names, react-select comboboxes, file inputs behind "Attach"). -->
+<html><head><meta charset="utf-8"><title>Apply - Site Reliability Engineer</title>
+<style>.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.listbox{border:1px solid #ccc} .field{margin:8px 0}</style></head>
+<body>
+<h1>Site Reliability Engineer</h1>
+<form id="application-form" novalidate>
+  <div class="field"><label for="first_name">First Name<span>*</span></label><input id="first_name" name="first_name" required></div>
+  <div class="field"><label for="last_name">Last Name<span>*</span></label><input id="last_name" name="last_name" required></div>
+  <div class="field"><label for="email">Email<span>*</span></label><input id="email" name="email" type="email" required></div>
+  <div class="field"><label for="phone">Phone</label><input id="phone" name="phone" type="tel"></div>
+  <div class="field"><label for="resume">Resume/CV<span>*</span></label>
+    <button type="button" onclick="document.getElementById('resume').click()">Attach</button>
+    <input id="resume" name="resume" type="file" class="visually-hidden" required></div>
+  <div class="field"><label for="cover_letter">Cover Letter</label>
+    <input id="cover_letter" name="cover_letter" type="file" class="visually-hidden"></div>
+  <div class="field"><label for="question_101" id="lbl101">LinkedIn Profile</label><input id="question_101" name="question_101"></div>
+  <div class="field combo" data-options="Yes|No">
+    <label for="question_102" id="lbl102">Have you previously worked at or consulted for Acme?*</label>
+    <input id="question_102" role="combobox" aria-required="true" aria-autocomplete="list" aria-labelledby="lbl102">
+    <div class="listbox" hidden></div></div>
+  <div class="field combo" data-options="Yes|No">
+    <label for="question_103" id="lbl103">Will you now or in the future require sponsorship for a visa?*</label>
+    <input id="question_103" role="combobox" aria-required="true" aria-autocomplete="list" aria-labelledby="lbl103">
+    <div class="listbox" hidden></div></div>
+  <div class="field"><label for="gender">Gender</label>
+    <select id="gender" name="gender"><option value="">Select...</option><option value="1">Male</option>
+    <option value="2">Female</option><option value="3">Decline to self identify</option></select></div>
+  <button type="submit">Submit application</button>
+</form>
+<script>
+  // Minimal react-select: typing shows matching [role=option]s; clicking one sets the value.
+  document.querySelectorAll('.combo').forEach(box => {
+    const input = box.querySelector('input'); const list = box.querySelector('.listbox');
+    const opts = box.dataset.options.split('|');
+    const show = () => {
+      list.innerHTML = ''; list.hidden = false;
+      opts.filter(o => o.toLowerCase().startsWith((input.value || '').toLowerCase().slice(0, 1)) || !input.value)
+          .forEach(o => { const d = document.createElement('div'); d.setAttribute('role', 'option'); d.textContent = o;
+            d.onclick = () => { input.value = o; input.dataset.chosen = o; list.hidden = true; }; list.appendChild(d); });
+    };
+    input.addEventListener('input', show); input.addEventListener('click', show);
+  });
+  document.getElementById('application-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const f = e.target; const data = {};
+    for (const el of f.querySelectorAll('input, select')) {
+      data[el.name || el.id] = el.type === 'file' ? (el.files[0] ? el.files[0].name : '') : (el.dataset.chosen || el.value);
+    }
+    const missing = ['first_name', 'last_name', 'email', 'resume'].filter(k => !data[k]);
+    if (!data.question_102 || !data.question_103) missing.push('questions');
+    if (missing.length) { alert('missing ' + missing); return; }
+    document.body.innerHTML = '<h1>Thank you for applying.</h1><pre id="submitted"></pre>';
+    document.getElementById('submitted').textContent = JSON.stringify(data);
+  });
+</script>
+</body></html>

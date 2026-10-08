@@ -1,0 +1,58 @@
+<!doctype html>
+<!-- Replica of the jobs.lever.co /apply form: questions in li.application-question with the
+     text in div.application-label, radio options wrapped in <label><input><span>, ✱ marks required. -->
+<html><head><meta charset="utf-8"><title>Lever apply</title></head>
+<body>
+<form id="application-form">
+  <ul>
+    <li class="application-question"><label><div class="application-label">Resume/CV<span class="required">✱</span></div>
+      <div class="application-field"><input type="file" name="resume"></div></label></li>
+    <li class="application-question"><label><div class="application-label">Full name<span class="required">✱</span></div>
+      <div class="application-field"><input type="text" name="name" required></div></label></li>
+    <li class="application-question"><label><div class="application-label">Email<span class="required">✱</span></div>
+      <div class="application-field"><input type="email" name="email" required></div></label></li>
+    <li class="application-question"><label><div class="application-label">Phone<span class="required">✱</span></div>
+      <div class="application-field"><input type="text" name="phone" required></div></label></li>
+    <li class="application-question"><label><div class="application-label">Current company<span class="required">✱</span></div>
+      <div class="application-field"><input type="text" name="org" required></div></label></li>
+    <li class="application-question"><label><div class="application-label">LinkedIn URL</div>
+      <div class="application-field"><input type="text" name="urls[LinkedIn]"></div></label></li>
+  </ul>
+  <ul>
+    <li class="application-question custom-question"><div><div class="application-label full-width multiple-choice">
+      <div class="text">Relevant years of experience<span class="required">✱</span></div></div>
+      <div class="application-field full-width required-field"><ul data-qa="multiple-choice">
+        <li><label><input type="radio" name="cards[a][field0]" value="Less than 1 year" required><span class="application-answer-alternative">Less than 1 year</span></label></li>
+        <li><label><input type="radio" name="cards[a][field0]" value="2-3 Years" required><span class="application-answer-alternative">2-3 Years</span></label></li>
+        <li><label><input type="radio" name="cards[a][field0]" value="3-5 Years" required><span class="application-answer-alternative">3-5 Years</span></label></li>
+        <li><label><input type="radio" name="cards[a][field0]" value="More than 5 Years" required><span class="application-answer-alternative">More than 5 Years</span></label></li>
+      </ul></div></div></li>
+    <li class="application-question custom-question"><div><div class="application-label full-width multiple-choice">
+      <div class="text">Do you have experience with Kubernetes?<span class="required">✱</span></div></div>
+      <div class="application-field full-width required-field"><ul data-qa="multiple-choice">
+        <li><label><input type="radio" name="cards[a][field1]" value="Yes" required><span class="application-answer-alternative">Yes</span></label></li>
+        <li><label><input type="radio" name="cards[a][field1]" value="No" required><span class="application-answer-alternative">No</span></label></li>
+      </ul></div></div></li>
+    <li class="application-question custom-question"><div><div class="application-label full-width multiple-choice">
+      <div class="text">Notice Period<span class="required">✱</span></div></div>
+      <div class="application-field full-width required-field"><ul data-qa="multiple-choice">
+        <li><label><input type="radio" name="cards[a][field2]" value="Immediate Joiner" required><span class="application-answer-alternative">Immediate Joiner</span></label></li>
+        <li><label><input type="radio" name="cards[a][field2]" value="30 Days" required><span class="application-answer-alternative">30 Days</span></label></li>
+      </ul></div></div></li>
+    <li class="application-question custom-question"><div><div class="application-label full-width">
+      <div class="text">Gender<span class="required">✱</span></div></div>
+      <div class="application-field"><select name="cards[b][field0]" required><option value="">Select...</option>
+        <option>Male</option><option>Female</option><option>Prefer not to disclose</option></select></div></div></li>
+  </ul>
+  <button id="btn-submit" type="submit" data-qa="btn-submit">SUBMIT APPLICATION</button>
+</form>
+<script>
+  document.getElementById('application-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target); const data = {};
+    for (const [k, v] of fd.entries()) data[k] = (v instanceof File) ? v.name : v;
+    document.body.innerHTML = '<h2>Application submitted!</h2><pre id="submitted"></pre>';
+    document.getElementById('submitted').textContent = JSON.stringify(data);
+  });
+</script>
+</body></html>

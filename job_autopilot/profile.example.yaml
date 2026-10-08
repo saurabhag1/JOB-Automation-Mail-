@@ -1,0 +1,44 @@
+# Your details. `python -m autopilot init` copies this to profile.yaml and fills
+# what it can read from your resume. Complete the blanks once - the bot types
+# these into real applications, so every value must be true.
+
+name: ""
+first_name: ""
+last_name: ""
+email: ""
+phone: ""                 # with country code, e.g. +91 9876543210
+city: ""
+state: ""
+country: India
+linkedin: ""
+github: ""
+portfolio: ""
+
+current_title: ""
+current_company: ""
+years_experience: 3
+notice_period: ""         # e.g. Immediate, 15 days, 30 days
+notice_period_days:       # the same as a number, for numeric form fields
+current_ctc: ""           # e.g. 8 LPA
+expected_ctc: ""          # e.g. 12 LPA
+expected_salary_usd: ""   # annual, for remote / international roles, e.g. 30000
+
+willing_to_relocate: true
+open_to: [remote, hybrid, onsite]
+authorized_countries: [India]   # where you may work without visa sponsorship
+
+education: ""             # e.g. B.Tech Computer Science Engineering, Shivaji University (2023)
+graduation_year:
+
+# Optional: years per skill, for "How many years of X?" questions. Skills you
+# list in your resume default to years_experience; anything else defaults to 0.
+skill_years: {}
+
+# Voluntary self-identification questions (US-style EEO forms).
+eeo:
+  gender: Prefer not to say
+  ethnicity: Prefer not to say
+  veteran: Prefer not to say
+  disability: Prefer not to say
+
+how_did_you_hear: Job board

@@ -1,0 +1,67 @@
+<!doctype html>
+<!-- Stand-in for a LinkedIn job page with a multi-step Easy Apply modal, built from the
+     selectors maintained bots use (button#jobs-apply-button-id, div[role=dialog].jobs-easy-apply-modal,
+     aria-labels "Continue to next step" / "Review your application" / "Submit application",
+     #follow-company-checkbox). It exercises the bot's logic; it is not LinkedIn's real DOM. -->
+<html><head><meta charset="utf-8"><title>DevOps Engineer | Acme | LinkedIn</title>
+<style>.vh{position:absolute;opacity:0;width:1px;height:1px} [hidden]{display:none}</style></head>
+<body>
+<h1>DevOps Engineer</h1>
+<button id="jobs-apply-button-id" class="jobs-apply-button artdeco-button" aria-label="Easy Apply to DevOps Engineer at Acme"><span>Easy Apply</span></button>
+<div role="dialog" class="jobs-easy-apply-modal" data-test-modal hidden>
+  <button aria-label="Dismiss" data-test-modal-close-btn onclick="closeModal()">×</button>
+  <section data-step="1">
+    <h3>Contact info</h3>
+    <div data-test-form-element><label for="email">Email address</label><input id="email" value="saurabhag012@gmail.com"></div>
+    <div data-test-form-element><label for="phone">Mobile phone number</label><input id="phone" required></div>
+    <button aria-label="Continue to next step" onclick="go(2)">Next</button>
+  </section>
+  <section data-step="2" hidden>
+    <h3>Resume</h3>
+    <label class="jobs-document-upload__upload-button" for="file">Upload resume</label>
+    <input type="file" name="file" id="file" class="vh">
+    <button aria-label="Continue to next step" onclick="go(3)">Next</button>
+  </section>
+  <section data-step="3" hidden>
+    <h3>Additional questions</h3>
+    <div data-test-form-element><label for="k8s">How many years of work experience do you have with Kubernetes?</label>
+      <input id="k8s" required><div class="artdeco-inline-feedback--error" id="k8s-error" hidden>Enter a whole number</div></div>
+    <div data-test-form-element><label for="auth">Are you legally authorized to work in India?</label>
+      <select id="auth" required><option>Select an option</option><option>Yes</option><option>No</option></select></div>
+    <fieldset data-test-form-builder-radio-button-form-component="true">
+      <legend><span data-test-form-builder-radio-button-form-component__title>Will you now or in the future require sponsorship?</span></legend>
+      <input type="radio" id="sp-yes" name="sp" value="Yes" class="vh"><label for="sp-yes">Yes</label>
+      <input type="radio" id="sp-no" name="sp" value="No" class="vh"><label for="sp-no">No</label>
+    </fieldset>
+    <button aria-label="Review your application" onclick="review()">Review</button>
+  </section>
+  <section data-step="4" hidden>
+    <h3>Review your application</h3>
+    <input type="checkbox" id="follow-company-checkbox" class="vh" checked><label for="follow-company-checkbox">Follow Acme to stay up to date with their page.</label>
+    <button aria-label="Submit application" onclick="submitApp()">Submit application</button>
+  </section>
+</div>
+<pre id="submitted"></pre>
+<script>
+  const modal = document.querySelector('[role=dialog]');
+  document.getElementById('jobs-apply-button-id').onclick = () => { modal.hidden = false; };
+  function closeModal() { modal.hidden = true; }
+  function go(n) { document.querySelectorAll('section').forEach(s => s.hidden = s.dataset.step != n); }
+  function review() {
+    const v = document.getElementById('k8s').value;
+    const err = document.getElementById('k8s-error');
+    if (!/^\d+$/.test(v) || document.getElementById('auth').selectedIndex === 0 || !document.querySelector('input[name=sp]:checked')) {
+      err.hidden = false; return;
+    }
+    err.hidden = true; go(4);
+  }
+  function submitApp() {
+    const data = {phone: document.getElementById('phone').value, resume: (document.getElementById('file').files[0] || {}).name || '',
+      k8s: document.getElementById('k8s').value, auth: document.getElementById('auth').value,
+      sponsorship: document.querySelector('input[name=sp]:checked').value,
+      follow: document.getElementById('follow-company-checkbox').checked};
+    modal.innerHTML = '<h2>Your application was sent to Acme!</h2><button onclick="document.querySelector(\'[role=dialog]\').remove()">Done</button>';
+    document.getElementById('submitted').textContent = JSON.stringify(data);
+  }
+</script>
+</body></html>

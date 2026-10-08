@@ -1,0 +1,16 @@
+# Secrets and personal data never leave this machine.
+.env
+profile.yaml
+data/
+output/
+# vault load keeps the replaced copy as .bak; half-written files end in .tmp
+*.bak
+*.tmp
+
+# The browser profile holds your LinkedIn / Naukri session cookies.
+data/browser-profile/
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
