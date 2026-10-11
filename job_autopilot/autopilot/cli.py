@@ -279,6 +279,9 @@ def cmd_apply(args, discover_first: bool = False) -> int:
 
             found = resolve_routes(jobs, settings, db, log)
             run.info["Employer forms found for link-only jobs"] = found
+            from autopilot.discovery.ats_boards import board_of
+
+            db.add_boards({b for j in jobs for b in (board_of(j.apply_url),) if b})
             if found:
                 now = datetime.now(timezone.utc)
                 for job in jobs:
@@ -416,7 +419,20 @@ def cmd_mail_report(args) -> int:
                 for a in reversed(db.applications()) if a["status"] != "dry_run"]
         db.close()
         RunFolder._xlsx(run_dir / "all_applications_so_far.xlsx", {"All applications": rows})
-    return 0 if send(run_dir) else 1
+    profile = load_profile()
+    pending = []
+    if settings.db_path.exists():
+        import json
+
+        from autopilot.apply.answers import ProfileAnswers
+        from autopilot.db import Database
+
+        standing = ProfileAnswers(profile)
+        db = Database(settings.db_path)
+        pending = [{"question": q["question"], "options": json.loads(q["options"] or "[]")}
+                   for q in db.pending() if standing.get(q["question"]) is None and not db.get_answer(q["question"])]
+        db.close()
+    return 0 if send(run_dir, profile_email=profile.email or "", pending=pending) else 1
 
 
 def main(argv=None) -> int:

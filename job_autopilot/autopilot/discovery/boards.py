@@ -24,6 +24,8 @@ INDEED_COUNTRY = {
     "India": "india", "Singapore": "singapore", "UAE": "united arab emirates", "Japan": "japan",
     "Netherlands": "netherlands", "Germany": "germany", "United Kingdom": "uk",
     "United States": "usa", "Canada": "canada", "Australia": "australia", "Ireland": "ireland",
+    "Taiwan": "taiwan", "Malaysia": "malaysia", "Saudi Arabia": "saudi arabia", "Qatar": "qatar",
+    "Hong Kong": "hong kong", "Poland": "poland",
 }
 TIER_SHARE = {1: 0.4, 2: 0.35, 3: 0.25}   # how a site's query budget is split across priorities
 

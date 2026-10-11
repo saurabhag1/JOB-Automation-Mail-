@@ -84,11 +84,31 @@ job_runs/2026-10-08_12-20-PM_IST/
 
 It's 70–150 words, and the subject reads "Application for <role> - <name> | 3 yrs DevOps & Cloud | Immediate".
 
+## The email HR receives
+
+Every email uses the same clean HTML layout (`autopilot/tailoring/email_template.py`), filled in for each job:
+
+- **Subject:** "Application for <Role> | <Name> | 3+ yrs DevOps & Cloud | Immediate Joiner".
+- **Opening:** a greeting with the company name, and one line with the role, your top 3 skills this posting asks for, and that you can join immediately.
+- **Why I'm a good fit:** your 3 tailored resume achievements that best match the posting, with exact numbers, already checked by the truth guard.
+- **Skills that match this role:** the skills in both your resume and the posting.
+- **Quick facts:** experience, notice period, location and current role, then your signature with phone, email, LinkedIn, GitHub and portfolio.
+
+No AI free text goes into it, so there are no internal ids and no implied skills.
+
+## Forms: answer once, reused on every run
+
+The bot fills Greenhouse / Lever / Ashby forms from your profile, your resume and saved answers. Open questions ("Describe your experience with…") are answered by an LLM from your resume only, and the truth guard must pass, otherwise the field is left empty.
+
+A form with a required question nobody has answered yet is not submitted. It goes to APPLY_MANUALLY, and the question appears in the report email under **"Information I need from you"**, ready to paste into `profile.yaml → answers`. Short keys match any wording that contains all their words, so `"family members or relatives": "No"` answers every company's version.
+
+The board list grows by itself: any Greenhouse / Lever / Ashby company seen in a search result is remembered and its whole board is scanned on later runs.
+
 ## Every day by itself (GitHub Actions)
 
 `.github/workflows/daily-job-autopilot.yml` runs the whole thing at **11:00 AM IST every day**. You can also start it yourself, either from **Actions → Daily Job Autopilot → Run workflow** (tick *dry_run* for a preview) or with `gh workflow run daily-job-autopilot.yml`.
 
-- It emails every fitting HR address it found, up to `apply.email.max_per_run` (50), from your Gmail.
+- It emails every fitting HR address it found, up to `apply.email.max_per_run` (80), from your Gmail.
 - It submits Greenhouse / Lever / Ashby forms.
 - It **emails the report to you**: the Excel file, the summary, `APPLY_MANUALLY.zip` and the log.
 - The repo is public, so nothing personal is committed, and the Actions page shows counts only.

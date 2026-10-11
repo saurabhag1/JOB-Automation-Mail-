@@ -21,6 +21,7 @@ from autopilot.text import numbers_in, unsupported_terms
 _YEARS_CLAIM = re.compile(r"(\d+(?:\.\d+)?)\s*\+?\s*(?:years|yrs)", re.I)
 _PLACEHOLDER = re.compile(r"\[[^\]]{1,40}\]|\{[^}]{1,40}\}|<[^>]{1,40}>|lorem ipsum", re.I)
 _TOKEN = re.compile(r"[A-Za-z0-9+#.]+")
+_SOURCE_ID = re.compile(r"\b[ep]\d+\.b\d+\b")
 
 
 def _caps_tokens(text: str) -> set[str]:
@@ -77,6 +78,8 @@ def problems(candidate: str, vocab_source: str, number_source: str, caps_source:
             found.append(f"claims {m.group(1)} years")
     if _PLACEHOLDER.search(candidate):
         found.append("placeholder text")
+    if _SOURCE_ID.search(candidate):
+        found.append("internal bullet id in the text")
     if units:
         found += misattributed(candidate, units, years)
     return found

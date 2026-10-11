@@ -141,9 +141,9 @@ def cover_note(master: dict, profile: Profile, job: Job, master_keys: set[str],
 
 
 def subject(settings: Settings, profile: Profile, job: Job) -> str:
-    template = settings.get("apply.email.subject", "Application for {title} | {name}")
-    return template.format(title=job.title or "DevOps / Cloud Engineer", name=profile.name or "",
-                           years=profile.years, company=job.company or "").strip(" |")
+    from autopilot.tailoring import email_template
+
+    return email_template.subject(settings.get("apply.email.subject", "Application for {title} | {name}"), profile, job)
 
 
 # --------------------------------------------------------------------------- #

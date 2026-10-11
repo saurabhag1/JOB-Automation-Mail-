@@ -97,9 +97,15 @@ def choose_option(answer: str, options: list[str]) -> str | None:
         exact = next((o for o in real if re.search(rf"(?<!\d){re.escape(number.group(1))}(?!\d)", o)), None)
         if exact:
             return exact
+    # Whole-word matches first, preferring options that start with the answer: "India" picks
+    # "India +91", never "British Indian Ocean Territory +246".
+    if len(na) >= 2:
+        words = [o for o in real if re.search(rf"(?<![a-z0-9]){re.escape(na)}(?![a-z0-9])", _norm(o))]
+        if words:
+            return min(words, key=lambda o: (not _norm(o).startswith(na), len(o)))
     for o in real:
         no = _norm(o)
-        if len(na) >= 3 and (na in no or (len(no) >= 3 and no in na)):
+        if len(na) >= 3 and (no.startswith(na) or (len(no) >= 3 and no in na)):
             return o
     best = max(real, key=lambda o: difflib.SequenceMatcher(None, na, _norm(o)).ratio())
     return best if difflib.SequenceMatcher(None, na, _norm(best)).ratio() >= 0.6 else None
@@ -140,6 +146,44 @@ def skill_years_from_resume(master: dict) -> dict[str, float]:
 
 
 # --------------------------------------------------------------------------- #
+# Your standing answers: profile.yaml -> answers
+# --------------------------------------------------------------------------- #
+# Open questions an honest paragraph from the resume can answer ("Describe your experience with
+# Kubernetes"); never facts like dates, IDs, salaries or yes/no eligibility.
+_OPEN_QUESTION = re.compile(r"\b(describe|explain|tell us|tell me|why (?:are|do|would)|what (?:interests|excites|makes|is your "
+                            r"experience|experience)|how (?:have|did|would) you|share (?:an|a|your)|walk us through|"
+                            r"summar|cover letter|motivation|additional information)", re.I)
+
+
+class ProfileAnswers:
+    """profile.yaml `answers:` - question text -> answer, set once and used on every run
+    (the report email lists the questions still missing, ready to paste here)."""
+
+    def __init__(self, profile: Profile):
+        raw = profile.answers if isinstance(profile.answers, dict) else {}
+        self.items = {question_key(str(q)): str(a).strip() for q, a in raw.items()
+                      if q and a is not None and str(a).strip()}
+
+    def get(self, label: str) -> str | None:
+        key = question_key(label)
+        if not key or not self.items:
+            return None
+        if key in self.items:
+            return self.items[key]
+        best = max(self.items, key=lambda k: difflib.SequenceMatcher(None, k, key).ratio())
+        if difflib.SequenceMatcher(None, best, key).ratio() >= 0.88:
+            return self.items[best]
+        # A short key matches any wording that contains all its words:
+        # "family members or relatives" answers Okta's and the next company's version alike.
+        words = set(key.split())
+        for k, value in self.items.items():
+            kw = [w for w in k.split() if len(w) > 2 and w not in ("the", "and", "you", "your", "any", "are", "have")]
+            if (len(kw) >= 2 or (kw and len(kw[0]) >= 6)) and all(w in words for w in kw):
+                return value
+        return None
+
+
+# --------------------------------------------------------------------------- #
 # The answer book
 # --------------------------------------------------------------------------- #
 class AnswerBook:
@@ -150,6 +194,8 @@ class AnswerBook:
         self.past_employers = [r.get("company", "").lower() for r in master.get("experience", []) if r.get("company")]
         self.cover_text = ""
         self.source_label = ""
+        self.standing = ProfileAnswers(profile)
+        self.writer = None         # optional: callable(question, job) -> str | None for open text questions
 
     # -- helpers ------------------------------------------------------------
     def _job_country(self, job: Job) -> str:
@@ -188,15 +234,49 @@ class AnswerBook:
         return str(self.p.notice_period or "")
 
     # -- the rules -----------------------------------------------------------
+    def _school(self) -> str:
+        if self.p.school:
+            return str(self.p.school)
+        m = re.search(r"\bfrom\s+([^,(]+)", str(self.p.education or ""))
+        return m.group(1).strip() if m else ""
+
+    def _degree(self) -> str:
+        if self.p.degree:
+            return str(self.p.degree)
+        edu = str(self.p.education or "")
+        if re.search(r"\b(b\.?\s?tech|b\.?e\.?|bachelor|b\.?sc|bca)\b", edu, re.I):
+            return "Bachelor's Degree"
+        if re.search(r"\b(m\.?\s?tech|m\.?e\.?|master|m\.?sc|mca|mba)\b", edu, re.I):
+            return "Master's Degree"
+        return edu
+
+    def _discipline(self) -> str:
+        if self.p.discipline:
+            return str(self.p.discipline)
+        m = re.search(r"computer science|information technology|electronics[\w &]*|electrical[\w &]*|mechanical",
+                      str(self.p.education or ""), re.I)
+        return m.group(0).strip().title() if m else ""
+
+    def _us_person(self, q: Question) -> str | None:
+        """Export-control 'U.S. person' choice, picked from the offered options for a non-US resident."""
+        if str(self.p.country or "").lower() in ("united states", "usa", "us"):
+            return None
+        for o in q.options:
+            low = o.lower()
+            if "not a u.s. person" in low and "not a current citizen" in low:
+                return o
+        return None
+
     def _rule_answer(self, q: Question, job: Job) -> str | None:
-        t = q.clean_label.lower()
+        t = re.sub(r"\s+", " ", re.sub(r"[()]", " ", q.clean_label.lower())).strip()
         p = self.p
         rules = [
             (r"\b(date of birth|dob|birth ?date|ssn|social security|national id|aadh?aa?r|pan (?:card|number)|"
              r"passport|driver.?s licen[sc]e)", lambda: None),
             (r"first name|given name|forename", lambda: p.first_name),
             (r"last name|surname|family name", lambda: p.last_name),
-            (r"preferred name", lambda: p.first_name),
+            (r"preferred name|name you.?d prefer|prefer(?:red)? to be called|nick ?name", lambda: p.first_name),
+            (r"u\.?s\.? person|export administration|export control", lambda: self._us_person(q)),
             (r"^(?:your )?(?:full )?(?:legal )?name\b|^name$", lambda: p.name),
             (r"e-?mail", lambda: p.email),
             (r"country code|dialing code|phone code", lambda: (p.phone or "").split()[0] if (p.phone or "").startswith("+") else "+91"),
@@ -223,7 +303,9 @@ class AnswerBook:
             (r"(?:work|working) (?:from|in|at) (?:the |our )?office|on-?site|hybrid|commut",
              lambda: YES if ({"onsite", "hybrid"} & {x.lower() for x in (p.open_to or [])}) else NO),
             (r"work(?:ing)? remote|remote(?:ly)? work|comfortable .*remote", lambda: YES if "remote" in [x.lower() for x in (p.open_to or [])] else NO),
-            (r"(?:previously|ever|currently) (?:worked|been employed|employed) (?:at|by|with|for)|former employee|worked here before",
+            (r"(?:previously|ever|currently) (?:worked|been employed|employed) (?:at|by|with|for)|former employee|"
+             r"worked here before|(?:been|were you) employed by .{0,60}(?:past|before|previously)|"
+             r"(?:worked|been employed) (?:at|by|for) .{0,60}(?:in the past|before)",
              lambda: YES if any(e and e in t for e in self.past_employers) or
              any(e and e in (job.company or "").lower() for e in self.past_employers) else NO),
             (r"(?:18|eighteen) years|legal age|at least 18", lambda: YES),
@@ -231,10 +313,13 @@ class AnswerBook:
             (r"\bstate\b|province|region", lambda: p.state),
             (r"\bcountry\b", lambda: p.country),
             (r"current location|where are you (?:located|based)|^location", lambda: ", ".join(x for x in (p.city, p.country) if x)),
-            (r"highest (?:degree|education|qualification)|^degree|education level|qualification", lambda: p.education),
+            (r"\bschool\b|university|college|institut", lambda: self._school()),
+            (r"discipline|field of study|\bmajor\b|speciali[sz]ation|branch", lambda: self._discipline()),
+            (r"highest (?:degree|education|qualification)|^degree|education level|qualification",
+             lambda: self._degree() if q.kind in ("select", "combobox", "radio") else p.education),
             (r"graduat.*year|year of (?:graduation|passing)|passing year", lambda: str(p.graduation_year or "")),
             (r"\bgender\b|\bsex\b", lambda: (p.eeo or {}).get("gender")),
-            (r"\brace\b|ethnic", lambda: (p.eeo or {}).get("ethnicity")),
+            (r"\brace\b|ethnic|hispanic|latino", lambda: (p.eeo or {}).get("ethnicity")),
             (r"veteran", lambda: (p.eeo or {}).get("veteran")),
             (r"disabilit", lambda: (p.eeo or {}).get("disability")),
             (r"pronoun", lambda: "Prefer not to say"),
@@ -243,7 +328,8 @@ class AnswerBook:
             (r"cover letter|why (?:are you|do you want|would you like|you want|you are)|tell us (?:about|why)|"
              r"additional information|anything else|message to (?:the )?hiring|summary of your|introduce yourself",
              lambda: self.cover_text or None),
-            (r"privacy|consent|i agree|agree to|acknowledge|terms|certify|declare|confirm that|accurate and complete",
+            (r"privacy|consent|i agree|agree to|acknowledg|terms|certify|declare|confirm that|accurate and complete|"
+             r"information policy|data policy|candidate (?:privacy|notice)",
              lambda: YES if q.kind in ("checkbox", "radio", "select", "combobox") else None),
         ]
         for pattern, handler in rules:
@@ -267,10 +353,15 @@ class AnswerBook:
         label = q.clean_label
         if not label:
             return None
+        standing = self.standing.get(label)
+        if standing is not None:
+            return standing
         cached = self.db.get_answer(label)
         if cached is not None:
             return cached
         value = self._rule_answer(q, job)
+        if value is None and self.writer is not None and q.kind in ("text", "textarea") and _OPEN_QUESTION.search(label):
+            value = self.writer(label, job)        # written from your resume, checked by the truth guard
         if value is not None and q.options and q.kind in ("select", "radio", "combobox", "checkbox_group"):
             if choose_option(value, q.options) is None:
                 value = None   # we know an answer but none of the offered options fits -> ask

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import time
 from collections import Counter
 from dataclasses import dataclass, field
@@ -68,8 +69,23 @@ def discover_and_screen(settings: Settings, profile: Profile, master: dict, db: 
     from autopilot.discovery import discover
     from autopilot.screening import screen
 
-    log("Discovering jobs...")
+    from autopilot.discovery.ats_boards import board_of
+
+    # Company boards learned from earlier search results are scanned like the configured ones.
+    ats = settings.data.setdefault("sources", {}).setdefault("ats_boards", {})
+    learned = 0
+    for kind, token in db.boards():
+        lst = ats.setdefault(kind, [])
+        if token not in lst:
+            lst.append(token)
+            learned += 1
+    log("Discovering jobs..." + (f" (+{learned} company boards learned on earlier runs)" if learned else ""))
     jobs = discover(settings, log)
+    seen_boards = {b for j in jobs for b in (board_of(j.apply_url), board_of(j.url)) if b}
+    configured = {(k, t.lower()) for k in ("greenhouse", "lever", "ashby") for t in ats.get(k, [])}
+    added = db.add_boards(seen_boards - configured)
+    if added:
+        log(f"Learned {added} new company job boards (Greenhouse/Lever/Ashby) - scanned from the next run on.")
     sources = Counter(j.source.split(":")[0] if j.source.startswith("web:") else j.source for j in jobs)
     log(f"Found {len(jobs)} postings ({', '.join(f'{k} {v}' for k, v in sources.most_common())}). Screening...")
     result = screen(jobs, settings, profile, master, db, log)
@@ -104,6 +120,36 @@ def _why_by_hand(job: Job, outcome: Outcome) -> str:
     return f"automatic attempt failed - {outcome.detail}"
 
 
+def open_answer_writer(settings: Settings, profile: Profile, master: dict, log=print):
+    """A callable(question, job) answering open form questions from the resume only, or None
+    without an LLM key. An answer that fails the truth guard is not used (the field stays empty)."""
+    from autopilot.resume.parser import resume_text
+    from autopilot.tailoring import guard
+    from autopilot.tailoring.free_llm import QuickLLM
+
+    llm = QuickLLM(settings, log)
+    if not llm:
+        return None
+    facts = resume_text(master)
+    units = guard.resume_units(master)
+
+    def write(question: str, job: Job) -> str | None:
+        data = llm.json(
+            "Answer one job-application form question for the candidate below, in first person, 40-110 words, "
+            "plain text. Use ONLY facts from the resume; never add tools, numbers, employers or years that are not "
+            f"in it. The candidate has {profile.years} years of experience and can join: "
+            f"{profile.notice_period or 'not stated'}.\n\nJob: {job.title} at {job.company or 'the company'}\n"
+            f"Question: {question}\n\nResume:\n{facts[:9000]}\n\n"
+            'Reply as JSON: {"answer": "..."}') or {}
+        answer = re.sub(r"\s+", " ", str(data.get("answer") or "")).strip()
+        context = f"{facts}\n{job.title}\n{job.company}\n{job.description}"
+        if not (15 <= len(answer.split()) <= 160) or guard.problems(answer, facts, facts, context, profile.years, units):
+            return None
+        return answer
+
+    return write
+
+
 def apply_jobs(jobs: list[Job], settings: Settings, profile: Profile, master: dict, db: Database,
                opts: RunOptions, log=print, run=None) -> Counter:
     from autopilot.apply.answers import AnswerBook
@@ -120,6 +166,8 @@ def apply_jobs(jobs: list[Job], settings: Settings, profile: Profile, master: di
         log(f"! email channel off: {mailer.problem()}")
         channels.remove("email")
     answers = AnswerBook(db, profile, master, interactive=opts.interactive, log=log)
+    if "ats" in channels or "linkedin" in channels or "naukri" in channels:
+        answers.writer = open_answer_writer(settings, profile, master, log)
     portal = PortalSession(settings, answers, opts.interactive,
                            auto_submit=bool(settings.get("apply.auto_submit", True)) and not opts.review, log=log)
     caps = {"email": settings.get("apply.email.max_per_run", 20), "ats": settings.get("apply.ats.max_per_run", 10),

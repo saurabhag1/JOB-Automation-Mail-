@@ -5,7 +5,7 @@ name: Daily Job Autopilot
 #
 # Each run: finds this week's DevOps / Cloud / SRE jobs (LinkedIn, Indeed, Naukri, Glassdoor, Bayt,
 # company boards, remote feeds, Google), keeps the genuine ones that fit, tailors your resume and your
-# usual email to each, EMAILS EVERY FITTING HR ADDRESS IT FOUND (up to 50 per run) from your Gmail and
+# usual email to each, EMAILS EVERY FITTING HR ADDRESS IT FOUND (up to 80 per run) from your Gmail and
 # submits Greenhouse / Lever / Ashby forms. The report - Excel, summary and APPLY_MANUALLY.zip with the
 # tailored resumes for jobs you must apply to yourself - is emailed to you.
 #
@@ -33,7 +33,7 @@ on:
         default: false
       max_applications:
         description: "Max applications this run (all channels)"
-        default: "60"
+        default: "100"
 
 concurrency:
   group: job-autopilot
@@ -46,12 +46,12 @@ jobs:
   autopilot:
     name: Find jobs, email HR, apply, report
     runs-on: ubuntu-latest
-    timeout-minutes: 170
+    timeout-minutes: 300
     env:
       TZ: Asia/Kolkata
       PYTHONUNBUFFERED: "1"
       DRY_RUN: ${{ inputs.dry_run || 'false' }}
-      MAX_APPLICATIONS: ${{ inputs.max_applications || '60' }}
+      MAX_APPLICATIONS: ${{ inputs.max_applications || '100' }}
       EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
       EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
       REPORT_EMAIL: ${{ secrets.REPORT_EMAIL }}

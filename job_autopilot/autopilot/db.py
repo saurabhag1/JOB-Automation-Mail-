@@ -64,6 +64,13 @@ CREATE TABLE IF NOT EXISTS pending_questions (
     first_asked TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS boards (
+    kind TEXT NOT NULL,
+    token TEXT NOT NULL,
+    first_seen TEXT NOT NULL,
+    PRIMARY KEY (kind, token)
+);
+
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at TEXT NOT NULL,
@@ -154,6 +161,18 @@ class Database:
         self.conn.execute("UPDATE jobs SET apply_type = ?, apply_url = ?, flags = ? WHERE id = ?",
                           (job.apply_type, job.apply_url, json.dumps(job.flags), job.id))
         self.conn.commit()
+
+    def add_boards(self, boards: set[tuple[str, str]]) -> int:
+        """Remember company job boards seen in search results; returns how many were new."""
+        before = self.conn.total_changes
+        self.conn.executemany("INSERT OR IGNORE INTO boards (kind, token, first_seen) VALUES (?, ?, ?)",
+                              [(k, t, now_iso()) for k, t in boards])
+        self.conn.commit()
+        return self.conn.total_changes - before
+
+    def boards(self, limit: int = 200) -> list[tuple[str, str]]:
+        rows = self.conn.execute("SELECT kind, token FROM boards ORDER BY first_seen DESC LIMIT ?", (limit,))
+        return [(r["kind"], r["token"]) for r in rows]
 
     def job_row(self, job_id: str) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()

@@ -148,10 +148,11 @@ def test_ai_search_rounds_stop_when_dry_and_never_trust_llm_emails(settings, mon
     settings.data["sources"]["ai_search"] = {"enabled": True, "web_searches": 6, "max_rounds": 5}
     monkeypatch.setenv("OPENROUTER_API_KEY", "x")
     monkeypatch.setattr(ai_search.gs, "available_providers", lambda: [])
-    pages = iter(range(1000))
+    counter = {"n": 0}
 
     def fake_web(query, settings, sess):
-        n = next(pages)
+        n = counter["n"]
+        counter["n"] += 1
         if n >= 2:                      # round 1 runs 2 searches; from round 2 on nothing new turns up
             return []
         return [{"link": f"https://www.linkedin.com/posts/hr-{n}_hiring-activity-{n}",
@@ -170,7 +171,14 @@ def test_ai_search_rounds_stop_when_dry_and_never_trust_llm_emails(settings, mon
     assert all(j.company != "Invented Corp" for j in jobs)          # not in the post text -> ignored
     assert jobs[0].experience_text == "2-4 years"                    # in the post text -> used
     phrase_prompts = [p for p in llm.prompts if "search phrases" in p]
-    assert len(phrase_prompts) == 1                                  # round 2 found nothing new -> stopped
+    assert len(phrase_prompts) == 2                                  # rounds 2 and 3 found nothing -> stopped
+
+    # With a target of 2 HR emails, round 1 already reaches it: no follow-up searches at all.
+    counter["n"] = 0
+    llm.prompts.clear()
+    settings.data["sources"]["ai_search"]["min_hr_emails"] = 2
+    ai_search.collect(settings, log=lambda *a: None)
+    assert not [p for p in llm.prompts if "search phrases" in p]
 
 
 def test_expand_queries_cleans_llm_output():

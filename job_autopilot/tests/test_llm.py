@@ -73,7 +73,7 @@ def test_request_shape_and_guarded_merge(master, profile, settings, tmp_path, mo
 
     assert pkg.method == "claude"
     assert pkg.cover_note.endswith("would welcome a conversation.")         # sign-off stripped (added by us)
-    assert pkg.subject.startswith("DevOps Engineer application")
+    assert pkg.subject.startswith("Application for DevOps Engineer | ")   # fixed, readable subject format
     assert any("kept original e2.b4" in n and "70%" in n for n in pkg.notes)  # invented metric reverted
     html = re.sub(r"<[^>]+>", "", (pkg.folder / "Saurabh_Agrawal_Resume.html").read_text())   # drop highlight tags
     assert "Strengthened Jenkins and Docker CI/CD pipelines" in html

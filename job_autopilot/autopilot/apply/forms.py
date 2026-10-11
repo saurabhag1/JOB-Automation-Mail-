@@ -111,10 +111,21 @@ SCAN_JS = r"""
       continue;
     }
     const label = ownLabel(el) || questionText(el) || el.placeholder || el.name || el.id || '';
+    // react-select & co. empty their text box after a choice and show it in a sibling element.
+    const chosen = (el) => {
+      let n = el;
+      for (let i = 0; i < 5 && n; i++, n = n.parentElement) {
+        const v = n.querySelector('[class*="single-value" i], [class*="singleValue"], [class*="multi-value__label" i], ' +
+                                  '[class*="multiValue"] [class*="label" i]');
+        if (v && clean(v.innerText)) return clean(v.innerText);
+      }
+      return '';
+    };
     const options = kind === 'select' ? Array.from(el.options).map(o => ({text: clean(o.text), value: o.value})) : [];
     out.push({apid: id, kind, name: el.name || el.id || '', label: clean(label), required: required(el, label),
               options, checked: [], value: kind === 'file' ? (el.files && el.files.length ? 'file' : '') :
-              (el.isContentEditable ? clean(el.innerText) : (el.value || '')), accept: el.accept || ''});
+              (el.isContentEditable ? clean(el.innerText) : (el.value || (kind === 'combobox' ? chosen(el) : ''))),
+              accept: el.accept || ''});
   }
   // Yes/No answered with toggle buttons (Ashby): <button aria-pressed> siblings.
   const seenBoxes = new Set();

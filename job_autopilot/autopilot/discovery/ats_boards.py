@@ -7,6 +7,7 @@ from settings.yaml; every default there was checked against the live API.
 
 from __future__ import annotations
 
+import re
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
@@ -112,6 +113,22 @@ def ashby(org: str, keep, days: int, sess) -> list[Job]:
             external_id=f"{org}:{p.get('id')}", country=detect_country(location),
         ))
     return jobs
+
+
+_BOARD = [("greenhouse", re.compile(r"(?:job-)?boards(?:-api)?\.greenhouse\.io/(?:embed/job_app\?for=|v1/boards/)?"
+                                  r"([a-z0-9][\w-]{1,60})", re.I)),
+          ("lever", re.compile(r"jobs\.(?:eu\.)?lever\.co/([a-z0-9][\w.-]{1,60})", re.I)),
+          ("ashby", re.compile(r"jobs\.ashbyhq\.com/([a-z0-9][\w.%-]{1,60})", re.I))]
+_NOT_A_BOARD = {"embed", "jobs", "v1", "api", "boards", "job_app"}
+
+
+def board_of(url: str) -> tuple[str, str] | None:
+    """('greenhouse', 'okta') for any Greenhouse / Lever / Ashby job or form URL."""
+    for kind, rx in _BOARD:
+        m = rx.search(url or "")
+        if m and m.group(1).lower() not in _NOT_A_BOARD:
+            return kind, m.group(1).lower()
+    return None
 
 
 def collect(settings: Settings, log=print) -> list[Job]:

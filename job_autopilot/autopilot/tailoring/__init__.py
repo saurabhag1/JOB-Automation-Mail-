@@ -16,7 +16,7 @@ from autopilot.config import Profile, Settings
 from autopilot.models import Job
 from autopilot.resume.parser import resume_text
 from autopilot.resume.render import render_letter_pdf, render_resume_pdf
-from autopilot.tailoring import guard, rules
+from autopilot.tailoring import email_template, guard, rules
 from autopilot.tailoring.free_llm import FreeLLMChain, free_keys_present
 from autopilot.tailoring.llm import ClaudeTailor, LLMError, LLMUnavailable, credentials_present
 from autopilot.text import find_terms, implied
@@ -58,6 +58,8 @@ class Package:
     pages: int = 0
     notes: list[str] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)
+    mail_text: str = ""       # the recruiter email (email_template.py); email_text is the cover letter
+    mail_html: str = ""
 
     @property
     def email_text(self) -> str:
@@ -178,12 +180,21 @@ class Tailor:
         else:
             pages = render_resume_pdf(resume, resume_pdf, highlight=highlight)
 
+        # The recruiter email: one fixed layout, filled from the tailored resume and your profile.
+        note = email_template.clean(note)
+        subject = email_template.subject(
+            s.get("apply.email.subject", "Application for {title} | {name} | {years}+ yrs DevOps & Cloud | {notice}"),
+            p, job)
+        mail_text, mail_html = email_template.build(
+            job, p, resume, rules.matched_display(self.master_keys, weights, 10), rules.descriptor(self.master),
+            rules._company_known(job), weights)
         package = Package(job_id=job.id, folder=folder, resume_pdf=resume_pdf, letter_pdf=folder / "Cover_Letter.pdf",
                           cover_note=note, subject=subject, signature=self.signature(), method=method,
-                          pages=pages, notes=notes, missing=missing)
+                          pages=pages, notes=notes, missing=missing, mail_text=mail_text, mail_html=mail_html)
         contact = " | ".join(x for x in (p.email, p.phone, p.city) if x)
         render_letter_pdf(p.name or "", contact, package.email_text, package.letter_pdf)
-        (folder / "email.txt").write_text(f"Subject: {subject}\n\n{package.email_text}\n", encoding="utf-8")
+        (folder / "email.txt").write_text(f"Subject: {subject}\n\n{mail_text}", encoding="utf-8")
+        (folder / "email.html").write_text(mail_html, encoding="utf-8")
         meta = {
             "job": {"id": job.id, "title": job.title, "company": job.company, "location": job.location,
                     "url": job.url, "apply_url": job.apply_url, "apply_type": job.apply_type,

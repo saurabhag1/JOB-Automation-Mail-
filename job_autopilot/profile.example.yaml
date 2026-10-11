@@ -28,6 +28,10 @@ open_to: [remote, hybrid, onsite]
 authorized_countries: [India]   # where you may work without visa sponsorship
 
 education: ""             # e.g. B.Tech Computer Science Engineering, Shivaji University (2023)
+# Optional - otherwise read from `education`: school, degree (e.g. Bachelor's Degree), discipline.
+school: ""
+degree: ""
+discipline: ""
 graduation_year:
 
 # Optional: years per skill, for "How many years of X?" questions. Skills you
@@ -42,3 +46,16 @@ eeo:
   disability: Prefer not to say
 
 how_did_you_hear: Job board
+
+# Standing answers for application forms: question text -> answer. Set once, used on every run.
+# Each report email lists the questions forms asked that are not answered yet, ready to paste here
+# (then update the AUTOPILOT_PROFILE_YAML secret with this whole file).
+answers:
+  # Short keys match any wording that contains all their words. Blank = not answered yet
+  # (the form is then left for you and the question shows up in the report email).
+  "family members or relatives": ""            # relatives / close relationships at the company? (Yes/No)
+  "outside business activity": ""              # advisory / consulting / side business you would continue? (Yes/No)
+  "post-employment restrictions": ""           # non-compete or similar with a current/past employer? (Yes/No)
+  "deemed export rule": ""                     # US export rule affecting your employment? (Yes/No)
+  "criminal": ""                               # ever convicted of a criminal offence? (Yes/No)
+  "accommodation": ""                          # interview accommodations needed? e.g. "No"

@@ -45,8 +45,8 @@ class Mailer:
             msg["Reply-To"] = self.profile.email
         msg["Date"] = formatdate(localtime=True)
         msg["Message-ID"] = make_msgid(domain=sender.split("@")[-1])
-        msg.set_content(package.email_text)
-        msg.add_alternative(package.email_html, subtype="html")
+        msg.set_content(getattr(package, "mail_text", "") or package.email_text)
+        msg.add_alternative(getattr(package, "mail_html", "") or package.email_html, subtype="html")
         msg.add_attachment(package.resume_pdf.read_bytes(), maintype="application", subtype="pdf",
                            filename=package.resume_pdf.name)
         return msg

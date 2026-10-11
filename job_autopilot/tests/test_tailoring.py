@@ -45,4 +45,7 @@ def test_package_renders_two_page_pdf(master, profile, settings, tmp_path):
     text = "".join(p.extract_text() for p in PdfReader(str(pkg.resume_pdf)).pages)
     assert "Immersive Pvt Ltd" in text and "Saurabh Agrawal" in text
     assert (pkg.folder / "package.json").exists() and pkg.letter_pdf.exists()
-    assert pkg.subject == "Application for Platform Engineer | Saurabh Agrawal | 3+ yrs DevOps & Cloud"
+    assert pkg.subject == "Application for Platform Engineer | Saurabh Agrawal | 3+ yrs DevOps & Cloud | Immediate Joiner"
+    # The recruiter email: fixed layout, no internal ids, real bullets and contact block.
+    assert "Why I'm a good fit" in pkg.mail_text and "e1.b" not in pkg.mail_text
+    assert pkg.mail_html.count("<li") == 3 and 'href="mailto:' in pkg.mail_html

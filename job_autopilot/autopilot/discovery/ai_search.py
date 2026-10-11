@@ -172,6 +172,9 @@ def collect(settings: Settings, log=print) -> list[Job]:
     max_rounds = int(settings.get(f"{cfg}.max_rounds", 4))
     roles = settings.get("search.keywords", ["DevOps Engineer"])
     places = ["India", "Remote"] + list(settings.get("locations.india.cities", []))
+    if settings.get("locations.international.enabled", True):
+        places += [str(x).split(",")[0].strip() for x in settings.get("locations.international.places", [])]
+    target = int(settings.get(f"{cfg}.min_hr_emails", 60))
     years = int(settings.get("search.experience_years", 3))
     llm = QuickLLM(settings, log)
     if not google_budget and not web_budget:
@@ -191,9 +194,14 @@ def collect(settings: Settings, log=print) -> list[Job]:
 
     # Round 1: the planned portal searches (half the Google budget) + recruiter-post phrases on the web.
     # Later rounds: AI-written phrases, each searched on the web and on Google while budget lasts.
-    plan = gs.plan_queries(settings)[:google_budget // 2]
+    plan = gs.plan_queries(settings)[:max(0, google_budget // 2 - 3)]
+    if google_budget >= 6:   # employer forms the bot can fill itself: Greenhouse / Lever / Ashby postings
+        ats_sites = "(site:job-boards.greenhouse.io OR site:boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com)"
+        plan += [("global", place, f'"{roles[i % len(roles)]}" {ats_sites} {place}')
+                 for i, place in enumerate(["India", "Remote", "Bengaluru"])]
     phrases = _first_queries(settings, roles, places, max(2, web_budget // 3) if web_budget else 3)
     counter = iter(range(10 ** 6))
+    dry = 0
     for rnd in range(1, max_rounds + 1):
         tasks = []   # (engine, group, place, role, query)
         if rnd == 1:
@@ -261,8 +269,12 @@ def collect(settings: Settings, log=print) -> list[Job]:
         log(f"  [ai] round {rnd}: {sum(t[0] == 'web' for t in tasks)} web + {sum(t[0] == 'google' for t in tasks)} "
             f"Google searches -> {len(pending)} new pages ({stale} older than this week skipped), "
             f"{new_hr} new HR emails")
-        if new_hr == 0 and rnd > 1:
-            log("  [ai] a round found no new HR email - stopping")
+        dry = dry + 1 if new_hr == 0 else 0
+        if dry >= 2:
+            log("  [ai] two rounds in a row found no new HR email - stopping")
+            break
+        if len(hr_seen) >= target:
+            log(f"  [ai] {len(hr_seen)} HR emails found (target {target}) - stopping")
             break
         if rnd == max_rounds or (w_left <= 0 and g_left <= 0):
             break
