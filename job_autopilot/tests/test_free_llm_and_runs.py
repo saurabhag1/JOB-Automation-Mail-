@@ -68,6 +68,7 @@ def free_env(monkeypatch):
 
 
 def test_chain_falls_through_busy_models(master, profile, settings, free_env, monkeypatch):
+    settings.data["tailoring"]["best_of"] = 2      # these tests are about comparing two drafts
     fake = FakeHTTP(master)
     monkeypatch.setattr("autopilot.tailoring.free_llm.requests.post", fake)
     chain = FreeLLMChain(settings, master, profile, log=lambda *a: None)
@@ -77,6 +78,7 @@ def test_chain_falls_through_busy_models(master, profile, settings, free_env, mo
 
 
 def test_rejected_key_turns_provider_off(master, profile, settings, free_env, monkeypatch):
+    settings.data["tailoring"]["best_of"] = 2      # these tests are about comparing two drafts
     monkeypatch.setattr("autopilot.tailoring.free_llm.requests.post", FakeHTTP(master, groq_status=401))
     chain = FreeLLMChain(settings, master, profile, log=lambda *a: None)
     assert [label for label, _ in chain.drafts(make_job(), True)] == ["gemini:gemini-3.5-flash"]
@@ -92,6 +94,7 @@ def test_all_providers_busy_is_a_per_job_error(master, profile, settings, free_e
 
 
 def test_best_of_picks_the_draft_the_guard_trusts(master, profile, settings, free_env, monkeypatch, tmp_path):
+    settings.data["tailoring"]["best_of"] = 2      # these tests are about comparing two drafts
     monkeypatch.setattr("autopilot.tailoring.free_llm.requests.post", FakeHTTP(master, gemini_invents=True))
     try:
         pkg = Tailor(master, profile, settings, tmp_path, log=lambda *a: None, dated=False).build(make_job(company="Acme"))
