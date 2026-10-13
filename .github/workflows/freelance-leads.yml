@@ -1,0 +1,109 @@
+name: Freelance / Contract DevOps Leads
+
+# Every day at 2:00 PM IST (or Actions -> "Freelance / Contract DevOps Leads" -> Run workflow):
+# finds contract / freelance / part-time / project DevOps work (remote or India), emails every new HR
+# contact your short HTML note + resume, and emails YOU the Excel (SR, Company Name, Position, Works /
+# Description, Location, Salary / Rate, Contract Type, Contact / HR Email, Job Role, Status).
+#
+# Uses only the secrets that already exist (all optional - a missing one only switches that part off):
+#   EMAIL_ADDRESS, EMAIL_PASSWORD, REPORT_EMAIL, AUTOPILOT_PROFILE_YAML, GEMINI_API_KEY, GROQ_API_KEY,
+#   OPENROUTER_API_KEY, SERPER_KEY, SERPAPI_KEY, SCRAPERAPI_KEY, SCRAPINGDOG_KEY, SEARCHAPI_KEY
+# Nothing is committed (public repo); the console masks email addresses. Recruiters already emailed by
+# this agent or by the Daily Job Autopilot are skipped (both histories are read from the Actions cache).
+on:
+  schedule:
+    - cron: "30 8 * * *"      # 08:30 UTC = 2:00 PM IST, every day
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Draft only - write the Excel and drafts, send nothing to HR"
+        type: boolean
+        default: false
+      max_send:
+        description: "Max HR emails this run"
+        default: "30"
+
+concurrency:
+  group: freelance-leads
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  leads:
+    name: Find contract leads, email HR, report
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      TZ: Asia/Kolkata
+      PYTHONUNBUFFERED: "1"
+      DRY_RUN: ${{ inputs.dry_run || 'false' }}
+      MAX_SEND: ${{ inputs.max_send || '30' }}
+      EMAIL_ADDRESS: ${{ secrets.EMAIL_ADDRESS }}
+      EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+      REPORT_EMAIL: ${{ secrets.REPORT_EMAIL }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      SERPER_KEY: ${{ secrets.SERPER_KEY }}
+      SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+      SCRAPERAPI_KEY: ${{ secrets.SCRAPERAPI_KEY }}
+      SCRAPINGDOG_KEY: ${{ secrets.SCRAPINGDOG_KEY }}
+      SEARCHAPI_KEY: ${{ secrets.SEARCHAPI_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: job_autopilot/requirements.txt
+
+      - name: Install (shares job_autopilot's code and requirements)
+        run: |
+          python -m venv job_autopilot/.venv
+          job_autopilot/.venv/bin/pip install --quiet --upgrade pip
+          job_autopilot/.venv/bin/pip install --quiet -r job_autopilot/requirements.txt
+
+      - name: Restore this agent's history (who was emailed, leads already seen)
+        uses: actions/cache/restore@v4
+        with:
+          path: freelance_leads/data/history.json
+          key: freelance-history-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: freelance-history-
+
+      - name: Read the Daily Job Autopilot's history too (so nobody is mailed twice)
+        uses: actions/cache/restore@v4
+        with:
+          path: job_autopilot/data/autopilot.db
+          key: autopilot-db-none-${{ github.run_id }}
+          restore-keys: autopilot-db-
+
+      - name: Profile
+        env:
+          AUTOPILOT_PROFILE_YAML: ${{ secrets.AUTOPILOT_PROFILE_YAML }}
+        run: |
+          if [ -n "$AUTOPILOT_PROFILE_YAML" ]; then
+            printf '%s\n' "$AUTOPILOT_PROFILE_YAML" > job_autopilot/profile.yaml
+          else
+            echo "::warning::No AUTOPILOT_PROFILE_YAML secret - your details are read from the resume."
+            job_autopilot/.venv/bin/python -c "import sys; sys.path.insert(0, 'job_autopilot'); import os; os.chdir('job_autopilot'); from autopilot.cli import main; main(['init'])" > /dev/null
+          fi
+          [ -n "$EMAIL_ADDRESS" ] && [ -n "$EMAIL_PASSWORD" ] || echo "::warning::EMAIL_ADDRESS / EMAIL_PASSWORD missing - drafts only, no emails."
+
+      - name: Find leads, email HR, write the Excel
+        run: |
+          args=(--max-send "$MAX_SEND")
+          if [ "$DRY_RUN" != "true" ]; then args+=(--send); fi
+          python3 freelance_leads/freelance_leads.py "${args[@]}"
+
+      - name: Save this agent's history
+        if: always() && hashFiles('freelance_leads/data/history.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: freelance_leads/data/history.json
+          key: freelance-history-${{ github.run_id }}-${{ github.run_attempt }}

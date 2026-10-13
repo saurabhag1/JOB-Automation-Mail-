@@ -1,0 +1,35 @@
+# Freelance / contract DevOps lead agent - what to look for and how much to send.
+# Secrets are NOT here: they come from the environment (GitHub Actions secrets, or the
+# job_autopilot/.env + job_lead_analyzer/.env files on your Mac).
+
+keywords:                 # role titles searched everywhere (rotated a little each day)
+  - DevOps Engineer
+  - AWS DevOps Engineer
+  - Cloud Engineer
+  - Site Reliability Engineer
+  - Kubernetes Engineer
+  - Terraform Engineer
+  - Platform Engineer
+
+places: [India, Remote, Pune, Bengaluru, Hyderabad, Mumbai, Gurugram, Noida, Chennai]
+
+max_age_days: 10          # contract posts older than this are dropped
+min_match: 0.30           # share of the posting's tech asks your resume covers (0-1)
+
+sources:
+  google:  {enabled: true, max_searches: 14}       # SERP keys (Serper / SerpApi / ScraperAPI / ...), past week
+  web:     {enabled: true, max_searches: 6}        # OpenRouter web search (~$0.007 each)
+  duckduckgo: {enabled: true, max_searches: 8}     # used only when no SERP key is set
+  boards:  {enabled: true, per_query: 25, max_queries: 10}   # Indeed / LinkedIn contract + part-time filters, Naukri
+  feeds:   {enabled: true}                         # Remotive, Jobicy, Himalayas (contract / freelance / part-time only)
+
+email:
+  send: true              # the workflow sends; locally the script only drafts unless you pass --send
+  max_send: 30            # per run
+  pause_seconds: [8, 20]
+  recontact_after_days: 60
+  subject: "{contract} {title} | {name} | {years}+ yrs DevOps & Cloud | Available immediately"
+  resume: ../bulk_mail_sender/Saurabh_Agrawal_2026.pdf
+  attachment_name: Saurabh_Agrawal_Resume.pdf
+
+report_email: true        # email the Excel + summary to you after every run

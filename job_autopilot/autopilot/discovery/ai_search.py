@@ -35,11 +35,18 @@ _YEARS = re.compile(r"(\d{1,2})\s*(?:\+|-|–|to)?\s*(?:\d{1,2})?\s*\+?\s*(?:yea
 # --------------------------------------------------------------------------- #
 # OpenRouter web search
 # --------------------------------------------------------------------------- #
+class WebSearchUnavailable(Exception):
+    """OpenRouter refused web search (no credit / bad key): skipped for the rest of the run."""
+
+
+_WEB_OFF: list[str] = []
+
+
 def web_search(query: str, settings: Settings, sess) -> list[dict]:
     """Search results as {link, title, snippet, date}, taken from the search engine's citations
     (the real page text), never from the model's reply."""
     key = os.getenv("OPENROUTER_API_KEY")
-    if not key:
+    if not key or _WEB_OFF:
         return []
     model = settings.get("sources.ai_search.web_model", "nvidia/nemotron-3-super-120b-a12b:free")
     since = (datetime.now(timezone.utc) - timedelta(days=int(settings.get("search.max_age_days", 7)))).date()
@@ -49,6 +56,11 @@ def web_search(query: str, settings: Settings, sess) -> list[dict]:
                         "plugins": [{"id": "web", "max_results": int(settings.get("sources.ai_search.results", 10))}],
                         "messages": [{"role": "user",
                                       "content": f"{query} {since:%B %Y} (posted after {since.isoformat()})"}]})
+    if r.status_code in (401, 402, 403):
+        _WEB_OFF.append(str(r.status_code))
+        raise WebSearchUnavailable(f"OpenRouter web search unavailable (HTTP {r.status_code}"
+                                   f"{': no credit left - add credit at openrouter.ai' if r.status_code == 402 else ''})"
+                                   " - skipped for the rest of this run")
     r.raise_for_status()
     msg = ((r.json().get("choices") or [{}])[0].get("message")) or {}
     out = []
@@ -227,8 +239,10 @@ def collect(settings: Settings, log=print) -> list[Job]:
             try:
                 if engine == "web":
                     return task, web_search(query, settings, sess)
-                provider = providers[next(counter) % len(providers)]
-                return task, gs.SEARCH[provider](sess, query, os.environ[gs.KEY_ENV[provider]])
+                return task, gs.search_any(sess, query, providers, next(counter), log)
+            except WebSearchUnavailable as exc:
+                log(f"  [ai:web] {exc}")
+                return task, []
             except Exception as exc:  # noqa: BLE001 - one failed search never stops the round
                 # Never print the exception text: request URLs carry API keys.
                 status = getattr(getattr(exc, "response", None), "status_code", "")

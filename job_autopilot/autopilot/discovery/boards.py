@@ -7,6 +7,8 @@ never touches your accounts. Every query is age-filtered on the server
 
 from __future__ import annotations
 
+import html
+
 import random
 import time
 from dataclasses import dataclass
@@ -136,8 +138,8 @@ def _to_job(row: dict, q: Query) -> Job:
 
     return Job(
         source=q.site,
-        title=clean(row.get("title")) or "",
-        company=clean(row.get("company")) or "",
+        title=html.unescape(clean(row.get("title")) or ""),       # "Cloud &amp; DevOps" -> "Cloud & DevOps"
+        company=html.unescape(clean(row.get("company")) or ""),
         url=url,
         location=location,
         description=description,

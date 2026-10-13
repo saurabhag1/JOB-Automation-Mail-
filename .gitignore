@@ -1,3 +1,9 @@
 # Local runs' reports stay local. The daily GitHub run (daily-job-autopilot.yml) commits its
 # own folder with `git add -f`, so those appear here after `git pull`.
 job_runs/
+
+# Freelance lead agent: run output and history stay local (emailed to you / Actions cache)
+freelance_leads/runs/
+freelance_leads/data/
+freelance_leads/__pycache__/
+freelance_leads/.pytest_cache/

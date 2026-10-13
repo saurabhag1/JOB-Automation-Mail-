@@ -2,6 +2,7 @@
 employer-form finder."""
 
 from collections import Counter
+from datetime import date, timedelta
 from types import SimpleNamespace
 
 from conftest import make_job
@@ -156,7 +157,7 @@ def test_ai_search_rounds_stop_when_dry_and_never_trust_llm_emails(settings, mon
         if n >= 2:                      # round 1 runs 2 searches; from round 2 on nothing new turns up
             return []
         return [{"link": f"https://www.linkedin.com/posts/hr-{n}_hiring-activity-{n}",
-                 "title": "Hiring DevOps Engineer | Pune", "date": "2026-10-06",
+                 "title": "Hiring DevOps Engineer | Pune", "date": (date.today() - timedelta(days=1)).isoformat(),
                  "snippet": f"We are hiring a DevOps Engineer, 2-4 years, AWS and Kubernetes. "
                             f"Share your resume at hr{n}@acme{n}.com"}]
 
@@ -204,3 +205,67 @@ def test_not_sent_reasons_are_counted():
     assert RunFolder.not_sent_reasons(hr) == Counter({
         "already emailed by an earlier run (60-day gap)": 2, "already mailed by your GitHub Actions pipeline": 1,
         "title not a DevOps/Cloud role": 1, "asks for more years than you have": 1, "queued": 1})
+
+
+# --------------------------------------------------------------------------- search hygiene
+def test_post_location_beats_the_searched_city():
+    from autopilot.discovery import google_search as gs
+
+    def loc(title, snippet):
+        job = gs._to_job("recruiter_posts", "Gurugram", "DevOps Engineer",
+                         {"link": "https://www.linkedin.com/posts/x-activity-7511334144832897024-a",
+                          "title": title, "snippet": snippet}, "")
+        return job.location, job.country
+
+    assert loc("Kubernetes Engineer", "12 month contract in Philadelphia, PA") == ("United States", "United States")
+    assert loc("Senior DevOps Engineer", "Hybrid role in Bangkok") == ("Thailand", "Thailand")
+    assert loc("DevOps Engineer", "Gurugram, India. Our clients are in the US and UK") == ("Gurugram", "India")
+    assert loc("DevOps Engineer", "share your resume") == ("Gurugram", "India")       # no place named: the search's
+
+
+def test_dead_search_key_is_skipped_for_the_run(monkeypatch):
+    import requests
+
+    from autopilot.discovery import google_search as gs
+
+    calls = []
+
+    def dead(sess, q, key):
+        calls.append("dead")
+        resp = requests.Response()
+        resp.status_code = 403
+        raise requests.HTTPError(response=resp)
+
+    def ok(sess, q, key):
+        calls.append("ok")
+        return [{"link": "https://x"}]
+
+    monkeypatch.setattr(gs, "SEARCH", {"scrapingdog": dead, "serper": ok})
+    monkeypatch.setattr(gs, "_DEAD", set())
+    monkeypatch.setenv("SCRAPINGDOG_KEY", "k")
+    monkeypatch.setenv("SERPER_KEY", "k")
+    assert gs.search_any(None, "q", ["scrapingdog", "serper"], 0) == [{"link": "https://x"}]
+    assert gs.search_any(None, "q", ["scrapingdog", "serper"], 0) == [{"link": "https://x"}]
+    assert calls == ["dead", "ok", "ok"]                 # the dead key was tried once, then skipped
+
+
+def test_web_search_stops_after_no_credit(settings, monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "k")
+    monkeypatch.setattr(ai_search, "_WEB_OFF", [])
+    posts = []
+    sess = SimpleNamespace(post=lambda *a, **k: posts.append(1) or SimpleNamespace(status_code=402))
+    import pytest
+
+    with pytest.raises(ai_search.WebSearchUnavailable, match="no credit"):
+        ai_search.web_search("q", settings, sess)
+    assert ai_search.web_search("q", settings, sess) == [] and posts == [1]
+
+
+def test_display_title():
+    from autopilot.tailoring.email_template import display_title
+
+    assert display_title("AZURE CLOUD ENGINEER") == "Azure Cloud Engineer"
+    assert display_title("DEVOPS ENGINEER L4") == "DevOps Engineer L4"
+    assert display_title("AWS DevOps Engineer") == "AWS DevOps Engineer"

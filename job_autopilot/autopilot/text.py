@@ -569,7 +569,21 @@ _COUNTRY_WORDS += [("Vietnam", ["ho chi minh", "hanoi"]), ("Portugal", ["lisbon"
                    ("Spain", ["madrid", "barcelona"]), ("France", ["paris"]), ("Poland", ["warsaw", "krakow"]),
                    ("Philippines", ["manila"]), ("Malaysia", ["kuala lumpur"]), ("Chile", ["santiago"]),
                    ("Brazil", ["são paulo", "sao paulo"]), ("Mexico", ["mexico city"]),
-                   ("Hungary", ["budapest"]), ("Romania", ["bucharest"])]
+                   ("Hungary", ["budapest"]), ("Romania", ["bucharest"]),
+                   ("United States", ["philadelphia", "dallas", "houston", "phoenix", "san jose", "san diego",
+                                      "pittsburgh", "detroit", "minneapolis", "charlotte", "raleigh", "nashville",
+                                      "salt lake city", "bay area", "silicon valley", "pennsylvania", "ohio",
+                                      "michigan", "arizona", "minnesota", "maryland", "tennessee", "utah",
+                                      "connecticut", "wisconsin", "missouri", "oregon"]),
+                   ("Thailand", ["bangkok"]), ("Indonesia", ["jakarta"]), ("Saudi Arabia", ["riyadh", "jeddah"]),
+                   ("Qatar", ["doha"]), ("Taiwan", ["taipei"]), ("South Korea", ["seoul"]),
+                   ("China", ["shanghai", "beijing", "shenzhen"]), ("Israel", ["tel aviv"]),
+                   ("Egypt", ["cairo"]), ("Nigeria", ["lagos"]), ("Kenya", ["nairobi"]),
+                   ("Pakistan", ["karachi", "lahore", "islamabad"]), ("Bangladesh", ["dhaka"]),
+                   ("Sri Lanka", ["colombo"]), ("Nepal", ["kathmandu"]), ("New Zealand", ["auckland"]),
+                   ("Switzerland", ["zurich", "geneva"]), ("Sweden", ["stockholm"]), ("Denmark", ["copenhagen"]),
+                   ("Norway", ["oslo"]), ("Finland", ["helsinki"]), ("Austria", ["vienna"]),
+                   ("Czech Republic", ["prague"]), ("Belgium", ["brussels"])]
 _COUNTRY_RX = [(country, _compile(words)) for country, words in _COUNTRY_WORDS]
 
 

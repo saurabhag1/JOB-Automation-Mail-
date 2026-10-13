@@ -50,6 +50,7 @@ def existing_pipeline_addresses(settings: Settings) -> set[str]:
     * bulk_mail_sender/mail_archive_7days/*.json - what the bulk sender mailed
     * bulk_mail_sender/Pasted text(1).txt        - today's bulk list
     * job_lead_analyzer/state.json               - what the lead collector mailed
+    * freelance_leads/data/history.json          - what the freelance lead agent mailed
     A list whose source is switched to "takeover" here is not counted, because
     then the autopilot is the one mailing it.
     """
@@ -69,6 +70,11 @@ def existing_pipeline_addresses(settings: Settings) -> set[str]:
         add_job_file(path)
     if not settings.get("sources.pasted_jobs.enabled", False):
         add_job_file(REPO / "bulk_mail_sender" / "Pasted text(1).txt")
+    try:   # the freelance / contract lead agent (freelance_leads/) keeps its own record
+        history = json.loads((REPO / "freelance_leads" / "data" / "history.json").read_text(encoding="utf-8"))
+        seen.update(e.lower() for e in history.get("contacted", {}))
+    except (OSError, ValueError):
+        pass
     if not settings.get("sources.hr_email_leads.enabled", False):
         try:
             state = json.loads((REPO / "job_lead_analyzer" / "state.json").read_text(encoding="utf-8"))

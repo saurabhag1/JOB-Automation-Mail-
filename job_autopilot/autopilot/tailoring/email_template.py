@@ -49,6 +49,14 @@ def nice_title(text: str) -> str:
                      for i, w in enumerate(words))
 
 
+def display_title(title: str) -> str:
+    """'AZURE CLOUD ENGINEER' -> 'Azure Cloud Engineer'; anything already mixed-case stays as written."""
+    letters = [c for c in title or "" if c.isalpha()]
+    if letters and all(c.isupper() for c in letters) and len(letters) > 5:
+        return nice_title(title.lower())
+    return (title or "").strip()
+
+
 def _notice_phrase(profile: Profile) -> tuple[str, str]:
     """('immediately', 'Immediate joiner') or ('with 30 days' notice', '30 days')."""
     notice = str(profile.notice_period or "").strip()
@@ -85,24 +93,27 @@ def highlights(resume: dict, weights: dict[str, float], n: int = 3) -> list[tupl
 def subject(template: str, profile: Profile, job: Job) -> str:
     _, notice = _notice_phrase(profile)
     return re.sub(r"\s*\|\s*\|", " |", template.format(
-        title=job.title or "DevOps / Cloud Engineer", name=profile.name or "", years=profile.years,
+        title=display_title(job.title) or "DevOps / Cloud Engineer", name=profile.name or "", years=profile.years,
         company=job.company or "", notice="Immediate Joiner" if notice == "Immediate joiner" else f"{notice} notice",
     )).strip(" |")
 
 
 def build(job: Job, profile: Profile, resume: dict, skills: list[str], descriptor: str,
-          company_known: bool, weights: dict[str, float]) -> tuple[str, str]:
-    """(plain text, html) for the email to the recruiter."""
+          company_known: bool, weights: dict[str, float], intro: str = "",
+          extra_facts: tuple[tuple[str, str], ...] = ()) -> tuple[str, str]:
+    """(plain text, html) for the email to the recruiter. *intro* may use {role} {at} {descriptor}
+    {years} {skills} {join} (the freelance-leads project words it for contract work)."""
     p = profile
-    role = job.title or "DevOps / Cloud Engineer"
+    role = display_title(job.title) or "DevOps / Cloud Engineer"
     company = job.company if company_known else ""
     at = f" at {company}" if company else ""
     join, notice = _notice_phrase(p)
     top = skills[:3]
     skill_part = (", ".join(top[:-1]) + " and " + top[-1]) if len(top) > 1 else (top[0] if top else "cloud infrastructure")
     greeting = f"Dear Hiring Team{at},"
-    intro = (f"I'm applying for the {role} role{at}. I'm a {descriptor} with {p.years}+ years of hands-on "
-             f"experience in {skill_part}, and I can join {join}.")
+    intro = (intro or "I'm applying for the {role} role{at}. I'm a {descriptor} with {years}+ years of hands-on "
+             "experience in {skills}, and I can join {join}.").format(
+        role=role, at=at, descriptor=descriptor, years=p.years, skills=skill_part, join=join)
     points = highlights(resume, weights)
     location = ", ".join(x for x in (p.city, p.country) if x)
     extras = []
@@ -115,6 +126,7 @@ def build(job: Job, profile: Profile, resume: dict, skills: list[str], descripto
     title = nice_title(p.current_title or "")
     if title and p.current_company:
         facts.append(("Current role", f"{title} at {p.current_company}"))
+    facts += list(extra_facts)
     closing = "My resume is attached. I'd welcome a short call at your convenience."
     links = [(k, v) for k, v in (("LinkedIn", p.linkedin), ("GitHub", p.github), ("Portfolio", p.portfolio)) if v]
 

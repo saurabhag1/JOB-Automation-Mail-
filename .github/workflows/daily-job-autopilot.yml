@@ -97,6 +97,13 @@ jobs:
           key: autopilot-db-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: autopilot-db-
 
+      - name: Read the freelance lead agent's history (so nobody is mailed twice)
+        uses: actions/cache/restore@v4
+        with:
+          path: freelance_leads/data/history.json
+          key: freelance-history-none-${{ github.run_id }}
+          restore-keys: freelance-history-
+
       - name: Check secrets (missing ones only warn)
         env:
           AUTOPILOT_PROFILE_YAML: ${{ secrets.AUTOPILOT_PROFILE_YAML }}

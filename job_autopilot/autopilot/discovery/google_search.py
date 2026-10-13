@@ -20,12 +20,13 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
+import requests
 from bs4 import BeautifulSoup
 
 from autopilot.config import Settings
 from autopilot.discovery.common import TIMEOUT, detect_ats, session, to_datetime
 from autopilot.models import APPLY_EMAIL, APPLY_EXTERNAL, Job
-from autopilot.text import FREE_MAIL, detect_country, pick_emails
+from autopilot.text import FREE_MAIL, detect_countries, detect_country, pick_emails
 
 PORTALS = {
     "recruiter_posts": ["linkedin.com/posts", "linkedin.com/feed"],
@@ -90,7 +91,35 @@ SEARCH = {"serper": _serper, "scraperapi": _scraperapi, "serpapi": _serpapi, "sc
 
 
 def available_providers() -> list[str]:
-    return [p for p in PROVIDER_ORDER if os.getenv(KEY_ENV[p])]
+    return [p for p in PROVIDER_ORDER if os.getenv(KEY_ENV[p]) and p not in _DEAD]
+
+
+_DEAD: set[str] = set()    # providers that rejected their key / ran out of credit during this run
+
+
+def search_any(sess, query: str, providers: list[str], start: int = 0, log=None) -> list[dict]:
+    """*query* on the first working provider, round-robin from *start*. A provider that answers
+    401/402/403/429 (bad key, no credit, quota used) is skipped for the rest of the run and the
+    next one is tried, so a dead key never costs a search."""
+    live = [p for p in providers if p not in _DEAD]
+    if not live:
+        return []
+    order = live[start % len(live):] + live[:start % len(live)]
+    last = None
+    for provider in order:
+        try:
+            return SEARCH[provider](sess, query, os.environ[KEY_ENV[provider]])
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else 0
+            if status not in (401, 402, 403, 429):
+                raise
+            _DEAD.add(provider)
+            if log:
+                log(f"  [google] {provider} unavailable (HTTP {status}: key or credit) - other keys used this run")
+            last = exc
+    if last is not None:
+        raise last
+    return []
 
 
 # --------------------------------------------------------------------------- #
@@ -200,16 +229,36 @@ def _to_job(group: str, place: str, role: str, item: dict, text: str) -> Job | N
     # Recruiter posts rarely have a clean job title in the result title: use the searched role.
     title = role if posts or len(title_raw) > 90 or not title_raw else title_raw
     domain = urlsplit(url).netloc.replace("www.", "")
+    location, country = (place if place.lower() != "remote" else "Remote"), \
+        (detect_country(place) if place.lower() != "remote" else "")
+    named = post_location(f"{title_raw}\n{snippet}", f"{title_raw}\n{snippet}\n{text[:4000]}")
+    if named:                      # the post names its own place: use it, not the city we searched for
+        location, country = ", ".join(named), named[0]
     return Job(
         source=f"web:{domain}", title=title, company=_company_from(hr_email, title_raw), url=url,
-        location=place if place.lower() != "remote" else "Remote", description=body[:15000],
+        location=location, description=body[:15000],
         apply_type=APPLY_EMAIL if hr_email and apply_type == APPLY_EXTERNAL else apply_type,
         apply_url=apply_url or url, hr_email=hr_email, alt_emails=alternates,
         date_posted=linkedin_post_date(url) or _age(str(item.get("date") or item.get("date_utc") or "")),
         date_trusted=True,
         is_remote=place.lower() == "remote" or "remote" in body[:3000].lower(),
-        country=detect_country(place) if place.lower() != "remote" else "",
+        country=country,
     )
+
+
+_US_STATE = re.compile(r",\s*(?:CA|NY|TX|PA|NJ|VA|WA|MA|IL|GA|NC|FL|CO|AZ|OH|MI|MN|MD|TN|UT|WI|MO|CT|SC)\b")
+_REGIONS = {"Worldwide", "APAC", "Europe", "LATAM"}
+
+
+def post_location(head: str, text: str) -> tuple[str, ...]:
+    """Countries a post names for itself when it never mentions India ("Chantilly, Virginia",
+    "Philadelphia, PA", "Bangkok"); () when it mentions India or names no country."""
+    found = [c for c in detect_countries(text) if c not in _REGIONS]
+    if "India" in found:
+        return ()
+    if not found and _US_STATE.search(head or ""):
+        found = ["United States"]
+    return tuple(dict.fromkeys(found))
 
 
 def collect(settings: Settings, log=print) -> list[Job]:
@@ -224,7 +273,7 @@ def collect(settings: Settings, log=print) -> list[Job]:
         provider = providers[i % len(providers)]
         role = re.match(r'"([^"]+)"', query).group(1)
         try:
-            results = SEARCH[provider](sess, query, os.environ[KEY_ENV[provider]])
+            results = search_any(sess, query, providers, i, log)
         except Exception as exc:  # noqa: BLE001 - next query, other provider
             log(f"  [google:{provider}] {group} search failed: {type(exc).__name__}")
             continue
