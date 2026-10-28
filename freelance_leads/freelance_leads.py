@@ -114,7 +114,7 @@ class ThrottledSession(requests.Session):
             self._last[host] = max(time.time(), self._last.get(host, 0) + self.gap)
         if wait > 0:
             time.sleep(wait)
-        kwargs.setdefault("timeout", 25)
+        kwargs["timeout"] = min(float(kwargs.get("timeout") or 25), 30.0)   # one slow provider can't stall a run
         return super().request(method, url, *args, **kwargs)
 
 
@@ -199,9 +199,11 @@ def side_time_reason(lead: "Lead") -> str:
     text = f"{job.title}\n{job.description[:4000]}"
     if job.source in PLATFORM_SOURCES:
         return "full-time commitment" if _FULL_TIME.search(text) and not _SIDE_TIME.search(text) else ""
-    if lead.kind == "Part-Time":
-        return ""
-    if _SIDE_TIME.search(text) and not re.search(r"\bfull[\s-]*time\b", text, re.I):
+    if re.search(r"\bfull[\s-]*time\b", text, re.I) and not re.search(r"part[\s-]*time", text, re.I):
+        return "full-time contract (needs 40 h/week)"
+    if lead.kind == "Part-Time" and lead.declared == "part_time":
+        return ""                                     # the posting itself says part-time
+    if _SIDE_TIME.search(text):
         return ""
     return "full-time contract (needs 40 h/week)"
 
@@ -272,7 +274,10 @@ class Lead:
 
 def clean_title(raw: str) -> str:
     title = htmllib.unescape(raw or "")
-    title = re.sub(r"\s*-\s*Freelance Job in .*$", "", title, flags=re.I)
+    title = re.sub(r"\s*-\s*Freelance Job\b.*$", "", title, flags=re.I)
+    tail = re.search(r"\s+-\s+([A-Za-z ]{1,16})\s*(?:\.\.\.|…)?$", title)
+    if tail and "freelance job in".startswith(tail.group(1).lower().strip()):
+        title = title[:tail.start()]                       # Google cut "- Freelance Job in ..." short
     for _ in range(3):
         title = _SUFFIX.sub("", title).strip()
     title = re.sub(r"^\[hiring\]\s*", "", title, flags=re.I)
@@ -420,6 +425,9 @@ def run_searches(sess, plan: list[tuple[str, str]], cfg: dict, settings, seen_ur
     for i, (kind, query) in enumerate(plan):
         try:
             items = gs.search_any(sess, query, providers, i, log.info) if providers else duckduckgo(sess, query)
+            live = gs.available_providers()
+            if not items and len(live) > 1:     # providers differ on site:/path queries - an empty answer gets a 2nd try
+                items = gs.search_any(sess, query, live, i + 1, log.info)
         except Exception as exc:  # noqa: BLE001 - never print the exception text: URLs carry keys
             log.info(f"  [google] search failed: {type(exc).__name__} {getattr(getattr(exc, 'response', None), 'status_code', '')}")
             continue
@@ -441,6 +449,8 @@ def run_searches(sess, plan: list[tuple[str, str]], cfg: dict, settings, seen_ur
             platform = next(((name, rx) for dom, (name, rx) in PLATFORMS.items() if host.endswith(dom)), None)
             if platform is None or not platform[1].search(url):
                 continue                                  # a listing page or an unknown site, not one project
+            if platform[0] == "Reddit r/forhire" and not re.search(r"\[\s*hiring\s*\]", item.get("title", ""), re.I):
+                continue                                  # "[For Hire]" = a freelancer advertising, not work offered
             page = "" if platform[0] in ("Upwork", "Guru", "Reddit r/forhire") else gs._page_text(sess, url)
             leads.append(Lead(platform_job(item, platform[0], page),
                               verified=f"{platform[0]} project page indexed by Google {item.get('date') or 'this week'}"
@@ -495,12 +505,18 @@ def from_boards(cfg: dict) -> list[Lead]:
         except Exception as exc:  # noqa: BLE001 - one site down never stops the run
             log.info(f"  [{site}] '{kw}' failed: {type(exc).__name__}")
             continue
-        q = boards.Query(site, kw, location, remote, location or country.title(), 1)
+        # is_remote False: remote must come from the posting itself, not from our search filter.
+        q = boards.Query(site, kw, location, False, location or country.title(), 1)
         rows = df.to_dict("records") if len(df) else []
         for row in rows:
             job = boards._to_job(row, q)
-            leads.append(Lead(job, declared={"parttime": "part_time"}.get(jtype, jtype),
-                              verified=f"{site.title()} {jtype} listing, posted {str(row.get('date_posted') or '?')[:10]}"))
+            own_type = str(row.get("job_type") or "").lower()          # the posting's own employment type
+            declared = "part_time" if "part" in own_type else "contract" if "contract" in own_type else ""
+            if "full" in own_type and not declared:
+                continue                                                 # a full-time job, whatever the filter said
+            leads.append(Lead(job, declared=declared,
+                              verified=f"{site.title()} listing ({own_type or 'type not stated'}), "
+                                       f"posted {str(row.get('date_posted') or '?')[:10]}"))
         log.info(f"  [{site}] '{kw}' {location or country} {jtype}: {len(rows)} postings")
         time.sleep(random.uniform(2, 5))
     return leads
@@ -557,13 +573,23 @@ _DEVOPS = re.compile(r"devops|devsecops|\bsre\b|site reliability|\bcloud\b|\baws
                      r"google cloud|kubernetes|\bk8s\b|docker|terraform|ansible|ci\s*/\s*cd|\bcicd\b|pipeline|jenkins|"
                      r"github actions|gitlab|helm|\beks\b|\becs\b|lambda|serverless|infrastructure|deploy|linux server|"
                      r"nginx|prometheus|grafana|monitoring|platform engineer|mlops|cloudformation|pulumi", re.I)
+# A marketplace project's title must name DevOps / cloud work (their skill tags alone are not enough).
+_TITLE_DEVOPS = re.compile(r"devops|devsecops|\bsre\b|site reliability|\bcloud\b|\baws\b|amazon web services|azure|"
+                           r"\bgcp\b|google cloud|kubernetes|\bk8s\b|openshift|docker|container|terraform|ansible|"
+                           r"cloudformation|pulumi|ci\s*/\s*cd|\bcicd\b|pipeline|jenkins|github actions|gitlab|argo\s*cd|"
+                           r"helm|\beks\b|\becs\b|\baks\b|\bgke\b|lambda|serverless|infrastructure|deploy|\bvps\b|"
+                           r"linux|nginx|server (?:setup|migration|configuration|admin)|prometheus|grafana|observability|"
+                           r"\bmlops\b|platform engineer", re.I)
+_SUPPORT_DESK = re.compile(r"\bl[123]\b|\bl[12]\s*/\s*l?[23]\b|help\s*desk|service desk|tech(?:nical)? support|"
+                           r"desktop support|application support|information analyst|\[for hire\]", re.I)
 _OFF_TOPIC = re.compile(r"wordpress|shopify|wix|webflow|landing page|logo|graphic|video|\bseo\b|marketing|"
                         r"data entry|virtual assistant|copywrit|translat|mobile app|android|\bios\b|flutter|"
                         r"react native|sales|accountant|tutor|photo|excel|crypto trading", re.I)
 _FREELANCE_SCAM = re.compile(r"verified accounts?|accounts? (?:needed|wanted)|\bkyc\b|bypass|crack(?:ed)?\b|"
                              r"rent (?:your|an?) (?:account|laptop)|free (?:test|trial) task|unpaid|"
                              r"registration fee|pay (?:a|the) fee|telegram only|whatsapp only|airdrop|"
-                             r"ghost ?writ|take (?:my|an?) (?:exam|test|interview)", re.I)
+                             r"ghost ?writ|take (?:my|an?) (?:exam|test|interview)|residential prox|proxy rotation|"
+                             r"proxy (?:an?|my|the) interview|interview proxy|fake (?:experience|resume)", re.I)
 
 
 def screen(leads: list[Lead], cfg: dict, settings, profile, master: dict, history: dict,
@@ -592,6 +618,10 @@ def screen(leads: list[Lead], cfg: dict, settings, profile, master: dict, histor
             reason = "older than max_age_days"
         elif not job.date_posted and not job.date_trusted:
             reason = "no posting date"
+        elif (job.source in PLATFORM_SOURCES or job.source == "LinkedIn post") and not _TITLE_DEVOPS.search(job.title):
+            reason = "not DevOps / cloud work"      # project / post whose title is about something else
+        elif _SUPPORT_DESK.search(job.title):
+            reason = "not DevOps / cloud work"
         elif not _DEVOPS.search(job.title) and (_OFF_TOPIC.search(job.title) or len(set(find_terms(text)) & CORE_TERMS) < 2):
             reason = "not DevOps / cloud work"      # no DevOps word in the title: needs 2+ core DevOps skills in the text
         elif _SENIOR.search(job.title):
@@ -646,7 +676,8 @@ def summarize(leads: list[Lead], settings) -> None:
 
     from autopilot.tailoring.free_llm import QuickLLM
 
-    llm = QuickLLM(settings, log.info)
+    # A convenience only: at most ~4 minutes, 40 s per call - unfinished ones keep the post's first sentences.
+    llm = QuickLLM(settings, log.info, timeout=40, max_models=2, budget_seconds=240)
     for lead in leads:
         lead.summary = brief(lead.job.description) or lead.job.title
     if not llm:

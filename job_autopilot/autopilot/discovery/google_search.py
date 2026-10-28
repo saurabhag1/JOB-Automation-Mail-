@@ -95,6 +95,7 @@ def available_providers() -> list[str]:
 
 
 _DEAD: set[str] = set()    # providers that rejected their key / ran out of credit during this run
+_STRIKES: dict[str, int] = {}
 
 
 def search_any(sess, query: str, providers: list[str], start: int = 0, log=None) -> list[dict]:
@@ -109,6 +110,14 @@ def search_any(sess, query: str, providers: list[str], start: int = 0, log=None)
     for provider in order:
         try:
             return SEARCH[provider](sess, query, os.environ[KEY_ENV[provider]])
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            _STRIKES[provider] = _STRIKES.get(provider, 0) + 1
+            if _STRIKES[provider] >= 2:
+                _DEAD.add(provider)
+                if log:
+                    log(f"  [google] {provider} keeps timing out - other keys used this run")
+            last = exc
+            continue
         except requests.HTTPError as exc:
             status = exc.response.status_code if exc.response is not None else 0
             if status not in (401, 402, 403, 429):

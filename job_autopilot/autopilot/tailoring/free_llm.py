@@ -199,8 +199,10 @@ class QuickLLM:
     post) - Gemini first, then Groq, then OpenRouter, whichever answers. Never used for facts
     that reach a recruiter unchecked: every answer is verified against the source text."""
 
-    def __init__(self, settings: Settings, log=print):
-        self.log = log
+    def __init__(self, settings: Settings, log=print, timeout: float = 120, max_models: int | None = None,
+                 budget_seconds: float | None = None):
+        self.log, self.timeout, self.max_models = log, timeout, max_models
+        self.deadline = time.time() + budget_seconds if budget_seconds else None   # optional total time budget
         configured = settings.get("tailoring.providers", DEFAULT_PROVIDERS) or DEFAULT_PROVIDERS
         self.providers = [p for p in configured if os.getenv(KEY_ENV.get(p["name"], ""))]
         self.cool_until: dict[str, float] = {}
@@ -212,14 +214,14 @@ class QuickLLM:
     def _call(self, provider: str, model: str, prompt: str) -> str:
         if provider == "gemini":
             r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                              headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, timeout=120,
+                              headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, timeout=self.timeout,
                               json={"contents": [{"role": "user", "parts": [{"text": prompt}]}],
                                     "generationConfig": {"responseMimeType": "application/json", "temperature": 0.7}})
             FreeLLMChain._raise_for(r)
             cand = (r.json().get("candidates") or [{}])[0]
             return "".join(p.get("text", "") for p in (cand.get("content") or {}).get("parts", []) if not p.get("thought"))
         headers = {"Authorization": f"Bearer {os.environ[KEY_ENV[provider]]}"}
-        r = requests.post(OPENAI_URL[provider], headers=headers, timeout=120,
+        r = requests.post(OPENAI_URL[provider], headers=headers, timeout=self.timeout,
                           json={"model": model, "temperature": 0.7, "response_format": {"type": "json_object"},
                                 "messages": [{"role": "user", "content": prompt}]})
         FreeLLMChain._raise_for(r)
@@ -230,7 +232,9 @@ class QuickLLM:
             name = provider["name"]
             if self.cool_until.get(name, 0) > time.time():
                 continue
-            for model in provider["models"]:
+            for model in provider["models"][: self.max_models or None]:
+                if self.deadline and time.time() > self.deadline:
+                    return None
                 try:
                     text = self._call(name, model, prompt)
                     match = re.search(r"\{.*\}", text, re.S)

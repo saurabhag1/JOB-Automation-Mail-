@@ -114,3 +114,22 @@ def test_peopleperhour_reads_the_project_page():
     leads = fl.peopleperhour(sess, {"sources": {"peopleperhour": {"keywords": ["devops"], "max_details": 5}}})
     assert len(leads) == 1 and leads[0].job.title == "AWS DevOps setup"          # the logo job was not fetched
     assert fl.rate_of(leads[0].job) == "USD 30 /hr" and "open until 2099-02-01" in leads[0].verified
+
+
+def test_marketplace_titles_must_name_devops_work():
+    assert fl.clean_title("Cloud Security Integration Specialist - Fr") == "Cloud Security Integration Specialist"
+    assert fl.clean_title("Platform DevOps Engineer - Freelance Job") == "Platform DevOps Engineer"
+    for title in ("Complete PHP Payment Gateway Platform", "React & Python Business Dashboard",
+                  "Secure Availability Monitoring And Booking", "Tech Talent Sourcing Partner"):
+        assert not fl._TITLE_DEVOPS.search(title), title
+    for title in ("AWS AI API Infrastructure Optimization", "ProCall Hub Deployment", "Kubernetes cluster setup",
+                  "Terraform modules for AWS", "CI/CD pipeline with GitHub Actions"):
+        assert fl._TITLE_DEVOPS.search(title), title
+    assert fl._FREELANCE_SCAM.search("extract the feed using residential proxies")
+
+
+def test_support_desks_and_for_hire_posts_are_not_work():
+    for title in ("Information Analyst – Application L1 Support", "Remote Tech Support (L1-L3), Firewalls, DevOps",
+                  "[For Hire] Devops engineer and cloud costs optimization"):
+        assert fl._SUPPORT_DESK.search(title), title
+    assert not fl._SUPPORT_DESK.search("DevOps Engineer - Kubernetes support for our platform team")
