@@ -1,14 +1,20 @@
 name: Freelance / Contract DevOps Leads
 
 # Every day at 2:00 PM IST (or Actions -> "Freelance / Contract DevOps Leads" -> Run workflow):
-# finds contract / freelance / part-time / project DevOps work (remote or India), emails every new HR
-# contact your short HTML note + resume, and emails YOU the Excel (SR, Company Name, Position, Works /
-# Description, Location, Salary / Rate, Contract Type, Contact / HR Email, Job Role, Status).
+# finds freelance DevOps / AWS / cloud WORK - projects and part-time gigs you can do in 2-3 hours a day
+# or at weekends - from clients worldwide (US, UK, Europe, Australia, India, ...):
+#   Freelancer.com (API), PeoplePerHour (project pages), Upwork / Guru / Contra / Truelancer /
+#   freelancermap / Reddit r/forhire (Google, past week), LinkedIn posts, LinkedIn + Indeed part-time
+#   and contract roles, Remotive / Jobicy / Himalayas.
+# Keeps only verified, current, remote, side-work friendly leads for 2-4 years of experience (at least
+# 15 per run when the search budget allows), emails any contact address found (short HTML note +
+# resume) and emails YOU the Excel (SR, Company Name, Position, Works / Description, Location,
+# Salary / Rate, Contract Type, Contact / HR Email, Job Role, Status) with a "Verified" column.
 #
 # Uses only the secrets that already exist (all optional - a missing one only switches that part off):
 #   EMAIL_ADDRESS, EMAIL_PASSWORD, REPORT_EMAIL, AUTOPILOT_PROFILE_YAML, GEMINI_API_KEY, GROQ_API_KEY,
 #   OPENROUTER_API_KEY, SERPER_KEY, SERPAPI_KEY, SCRAPERAPI_KEY, SCRAPINGDOG_KEY, SEARCHAPI_KEY
-# Nothing is committed (public repo); the console masks email addresses. Recruiters already emailed by
+# Nothing is committed (public repo); the console masks email addresses. Contacts already emailed by
 # this agent or by the Daily Job Autopilot are skipped (both histories are read from the Actions cache).
 on:
   schedule:

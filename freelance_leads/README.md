@@ -1,36 +1,48 @@
-# Freelance / Contract DevOps Leads
+# Freelance DevOps / AWS Work Finder
 
-This agent finds **contract, freelance, part-time and project** DevOps / Cloud work that is remote or in India. It emails each new HR contact a short note with your resume, and sends you an Excel report.
+This agent finds **freelance projects and part-time gigs** in DevOps, AWS and cloud work that you can do on the side, **2-3 hours a day or at weekends**. Clients can be anywhere: the US, UK, Europe, Australia, India and elsewhere.
 
-- **Runs:** every day at **2:00 PM IST** (`.github/workflows/freelance-leads.yml`). You can also start it from **Actions → Freelance / Contract DevOps Leads → Run workflow**; tick *dry_run* to draft without sending.
-- **Locally:** `python3 freelance_leads/freelance_leads.py` drafts only. Add `--send` to email HR.
+- **Runs:** every day at **2:00 PM IST** (`.github/workflows/freelance-leads.yml`). You can also start it from **Actions → Freelance / Contract DevOps Leads → Run workflow**; tick *dry_run* to only draft.
+- **Locally:** `python3 freelance_leads/freelance_leads.py` drafts only. Add `--send` to email the contacts found.
 
-## What it does
+## Where it looks
 
-1. **Searches** these sources:
-   - Google, past week (your SERP keys): LinkedIn recruiter posts that say "contract / freelance / C2H … share your resume", plus Cutshort, Wellfound, Arc, Contra, Remote.co, Himalayas, Naukri, foundit and Instahyre.
-   - OpenRouter web search.
-   - Indeed and LinkedIn with their *contract* and *part-time* filters, and Naukri "contract" / "freelance".
-   - The Remotive, Jobicy and Himalayas feeds (contract, freelance and part-time posts only).
-   - DuckDuckGo, only if no SERP key is set.
-2. **Keeps only genuine leads.** A lead must be:
-   - posted in the last 10 days;
-   - really contract-type (an "employment contract" or "smart contract" mention doesn't count);
-   - remote and open to India, or based in India;
-   - asking for at most 5 years of experience;
-   - free of scam wording;
-   - a match for your resume skills (at least 30%).
+| Source | How |
+|---|---|
+| **Freelancer.com** | Public projects API: open projects tagged DevOps, AWS, Kubernetes, Docker, Terraform, Jenkins, Ansible, SRE, Lambda, Azure or GCP |
+| **PeoplePerHour** | Search pages, then each project's own page (posted date, open-until date, rate) |
+| **Upwork** | Google, past week, `upwork.com/freelance-jobs/apply/…`; one skill per search, rotated daily |
+| **Guru, Contra, Truelancer, freelancermap, Reddit r/forhire** | Google, past week; only links to one specific project |
+| **LinkedIn posts** | "looking for a freelance / part-time DevOps…" posts in the US, UK, Europe and Australia, plus remote |
+| **LinkedIn + Indeed** | Part-time and contract roles, remote, in the US, UK, EU, Australia, Canada and India |
+| **Remotive, Jobicy, Himalayas** | Contract, freelance and part-time posts only |
 
-   An AI also drops training ads and job-seeker posts. Each lead appears only once across runs.
-3. **Emails HR**, at most 30 per run. It uses the same clean layout as the job autopilot: your 3 most relevant achievements, matching skills, availability for contract work, and your contact details. Your resume PDF is attached.
-4. **Never emails the same recruiter twice**, whether they were contacted by this agent, the Daily Job Autopilot or the older mailers.
-5. **Excel report** `runs/<stamp>/devops_leads_YYYYMMDD_HHMMSS.xlsx`:
-   - **Columns:** SR · Company Name · Position (links to the post) · Works / Description · Location · Salary / Rate · Contract Type · Contact / HR Email · Job Role · Status.
-   - **Status** is *Sent*, *Email Drafted* or *Pending Review* (no HR email: apply via the link).
-   - A **Details** sheet has the links, dates, skill match and notes.
+## What it keeps (verified)
 
-   The workbook is emailed to you after every run.
+A lead must meet all of these:
 
-Settings live in `config.yaml`: keywords, places, freshness, search budgets and the send cap. Keys come only from the variables that already exist: `EMAIL_ADDRESS`, `EMAIL_PASSWORD`, the SERP keys, `GEMINI/GROQ/OPENROUTER_API_KEY` and `REPORT_EMAIL`. Your details come from `job_autopilot/profile.yaml` (the `AUTOPILOT_PROFILE_YAML` secret in Actions).
+- It is **one real project or post**, not a list or search page.
+- It was posted in the **last 10 days** and is still open.
+- It is **remote** and doesn't need full-time hours: "40 hours a week", "full-time" and on-site work are skipped.
+- It suits **2-4 years of experience**: senior, lead and architect titles, and "5+ years" asks, are dropped.
+- It has **no scam signs**: account renting, KYC, fees, "free test task", exam proxies and so on.
+- It pays at least **$100 fixed or $10/hr** when a budget is shown.
+- It is really **DevOps / cloud work** that matches your resume.
 
-The code is shared with `job_autopilot/`: search, screening and the email template. Install it once with `job_autopilot/requirements.txt`.
+Each lead's **Verified** column records where it was checked, for example *"Freelancer.com API: open project, 14 bids, posted 3 h ago"* or *"PeoplePerHour project page: posted …, open until …"*.
+
+If fewer than **15** leads survive, it runs extra Upwork skill searches (Linux/Nginx, Ansible, CloudFormation, SRE, cloud cost, DevSecOps) until it has 15 or the search budget is spent.
+
+## Output
+
+`runs/<stamp>/devops_leads_<stamp>.xlsx` is emailed to you after every run:
+
+- **Leads sheet:** SR · Company Name · Position (links to the post) · Works / Description · Location · Salary / Rate (the budget) · Contract Type (Freelance - Hourly / Fixed price, Part-Time, Contract) · Contact / HR Email (or "Apply on Upwork" and similar) · Job Role · Status.
+- **Details sheet:** platform, verification, links, posted date, skill match and notes.
+
+**Contacts:**
+
+- Posts that publish an email address get your short HTML note with your resume, at most 30 per run. Recruiters already emailed by this agent or by the Daily Job Autopilot are never emailed again.
+- Marketplace projects are applied to on the platform, using the link in the sheet.
+
+Settings live in `config.yaml`: availability, experience, freshness, `min_leads`, budget floors, search terms and caps. Keys come only from the variables that already exist (`EMAIL_ADDRESS`, `EMAIL_PASSWORD`, the SERP keys, `GEMINI/GROQ/OPENROUTER_API_KEY`, `REPORT_EMAIL`). The code is shared with `job_autopilot/` (search, screening, email template).

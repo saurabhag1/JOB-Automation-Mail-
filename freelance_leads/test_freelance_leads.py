@@ -42,3 +42,75 @@ def test_excel_columns(tmp_path):
     ws = openpyxl.load_workbook(path)["Leads"]
     assert [c.value for c in ws[1]] == fl.COLUMNS
     assert [c.value for c in ws[2]][:3] == [1, "Acme", "DevOps Engineer"] and ws.cell(2, 10).value == "Sent"
+
+
+# --------------------------------------------------------------------------- freelance marketplaces
+import json  # noqa: E402
+import time  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+
+
+def test_clean_title_and_platform_job():
+    assert fl.clean_title("AWS DevOps for Logistics Backend - Freelance Job in DevOps Engineering - $25.00-$50.00 "
+                          "Hourly - Upwork") == "AWS DevOps for Logistics Backend"
+    assert fl.clean_title("[Hiring] Terraform help needed : r/forhire") == "Terraform help needed"
+    j = fl.platform_job({"link": "https://www.upwork.com/freelance-jobs/apply/DevOps_~0221/",
+                         "title": "Kubernetes cluster setup - Upwork", "date": "3 days ago",
+                         "snippet": "Hourly: $25.00-$40.00. Set up EKS with Terraform and Helm."}, "Upwork")
+    assert j.title == "Kubernetes cluster setup" and j.company == "Upwork client" and j.is_remote
+    assert j.date_posted is not None and fl.rate_of(j) == "$25.00-$40.00"
+
+
+def test_side_time_and_seniority():
+    project = fl.Lead(job(source="Upwork", description="Fixed-price: migrate our app to AWS ECS, Terraform."))
+    assert fl.side_time_reason(project) == ""
+    full = fl.Lead(job(source="Upwork", description="Full-time, 40 hours/week, Monday to Friday DevOps role."))
+    assert fl.side_time_reason(full) == "full-time commitment"
+    contract = fl.Lead(job(source="linkedin", description="12 month contract, full-time, AWS DevOps."), kind="Contract")
+    assert fl.side_time_reason(contract).startswith("full-time contract")
+    part = fl.Lead(job(source="linkedin", description="Contract, 10-15 hours/week, AWS + Terraform."), kind="Contract")
+    assert fl.side_time_reason(part) == ""
+    assert fl._SENIOR.search("Senior DevOps Engineer") and not fl._SENIOR.search("DevOps Engineer (2-4 yrs)")
+
+
+class FakeSession:
+    def __init__(self, routes):
+        self.routes = routes
+
+    def get(self, url, params=None, **kw):
+        for prefix, body in self.routes.items():
+            if url.startswith(prefix):
+                text = body if isinstance(body, str) else json.dumps(body)
+                return SimpleNamespace(text=text, json=lambda t=text: json.loads(t), ok=True, status_code=200)
+        return SimpleNamespace(text="", json=lambda: {}, ok=False, status_code=404)
+
+
+def test_freelancer_api_parsing():
+    now = time.time()
+    api = {"result": {"projects": [
+        {"id": 1, "title": "Terraform modules for AWS", "status": "active", "language": "en", "type": "fixed",
+         "seo_url": "terraform/Terraform-modules", "currency": {"code": "USD"}, "budget": {"minimum": 250, "maximum": 750},
+         "description": "Write Terraform for VPC, EKS.", "jobs": [{"name": "Terraform"}, {"name": "Amazon Web Services"}],
+         "time_submitted": now - 3600, "bid_stats": {"bid_count": 12}, "frontend_project_status": "open"},
+        {"id": 2, "title": "Closed one", "status": "closed", "language": "en", "type": "fixed", "seo_url": "x",
+         "currency": {"code": "USD"}, "budget": {}, "time_submitted": now}]}}
+    leads = fl.freelancer_com(FakeSession({"https://www.freelancer.com/api": api}),
+                              {"sources": {"freelancer": {"pages": 1}}})
+    assert len(leads) == 1
+    lead = leads[0]
+    assert lead.job.url == "https://www.freelancer.com/projects/terraform/Terraform-modules"
+    assert fl.rate_of(lead.job) == "USD 250-750 fixed price" and "12 bids" in lead.verified
+
+
+def test_peopleperhour_reads_the_project_page():
+    listing = '<a href="https://www.peopleperhour.com/freelance-jobs/technology-programming/devops/aws-devops-setup-4528561">x</a>' \
+              '<a href="https://www.peopleperhour.com/freelance-jobs/design/logo-design-4528562">y</a>'
+    posting = {"@type": "JobPosting", "title": "AWS DevOps setup", "description": "<p>Set up CI/CD and ECS</p>",
+               "datePosted": "2099-01-01 10:00:00", "validThrough": "2099-02-01 10:00:00",
+               "baseSalary": {"currency": "USD", "value": {"unitText": "HOUR", "value": "30"}}}
+    page = f'<script type="application/ld+json">{json.dumps(posting)}</script>'
+    sess = FakeSession({"https://www.peopleperhour.com/freelance-jobs/technology": page,
+                        "https://www.peopleperhour.com/freelance-jobs": listing})
+    leads = fl.peopleperhour(sess, {"sources": {"peopleperhour": {"keywords": ["devops"], "max_details": 5}}})
+    assert len(leads) == 1 and leads[0].job.title == "AWS DevOps setup"          # the logo job was not fetched
+    assert fl.rate_of(leads[0].job) == "USD 30 /hr" and "open until 2099-02-01" in leads[0].verified

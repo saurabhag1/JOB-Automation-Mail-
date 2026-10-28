@@ -1,34 +1,60 @@
-# Freelance / contract DevOps lead agent - what to look for and how much to send.
+# Freelance DevOps / AWS work finder - what to look for and how much to send.
 # Secrets are NOT here: they come from the environment (GitHub Actions secrets, or the
 # job_autopilot/.env + job_lead_analyzer/.env files on your Mac).
 
-keywords:                 # role titles searched everywhere (rotated a little each day)
-  - DevOps Engineer
-  - AWS DevOps Engineer
-  - Cloud Engineer
-  - Site Reliability Engineer
-  - Kubernetes Engineer
-  - Terraform Engineer
-  - Platform Engineer
+availability: "2-3 hours a day plus weekends"   # said in every email; work that needs more is skipped
+experience: {years: 3, max_years_asked: 4}      # 2-4 years: posts asking 5+ years or senior/lead titles are dropped
 
-places: [India, Remote, Pune, Bengaluru, Hyderabad, Mumbai, Gurugram, Noida, Chennai]
-
-max_age_days: 10          # contract posts older than this are dropped
-min_match: 0.30           # share of the posting's tech asks your resume covers (0-1)
+max_age_days: 10          # posts older than this are dropped
+min_leads: 15             # fewer verified leads than this -> extra searches (topup_searches) until reached
+min_match: 0.25           # share of the post's tech asks your resume covers (0-1)
+budget: {min_fixed_usd: 100, min_hourly_usd: 10}   # marketplace projects paying less are dropped
 
 sources:
-  google:  {enabled: true, max_searches: 14}       # SERP keys (Serper / SerpApi / ScraperAPI / ...), past week
-  web:     {enabled: true, max_searches: 6}        # OpenRouter web search (~$0.007 each)
-  duckduckgo: {enabled: true, max_searches: 8}     # used only when no SERP key is set
-  boards:  {enabled: true, per_query: 25, max_queries: 10}   # Indeed / LinkedIn contract + part-time filters, Naukri
-  feeds:   {enabled: true}                         # Remotive, Jobicy, Himalayas (contract / freelance / part-time only)
+  # Freelancer.com public API: open projects tagged DevOps, AWS, Kubernetes, Docker, Terraform,
+  # Jenkins, Ansible, SRE, AWS Lambda, Azure, Google Cloud.
+  freelancer: {enabled: true, pages: 2}
+  # PeoplePerHour: search pages -> each project's own page (posted / open-until / rate).
+  peopleperhour: {enabled: true, max_details: 40, keywords: [devops, aws, kubernetes, terraform, docker, ci cd]}
+  # Google, past week, via your SERP keys (Serper / SerpApi / ScraperAPI / SearchApi / Scrapingdog):
+  google:
+    enabled: true
+    max_searches: 16
+    upwork_searches: 8          # Upwork projects (the biggest marketplace), one skill per search, rotated daily
+    upwork_terms:
+      - "(DevOps OR \"CI/CD\")"
+      - "(AWS OR \"Amazon Web Services\") (setup OR migration OR deployment)"
+      - "Terraform"
+      - "Kubernetes"
+      - "Docker (deployment OR setup)"
+      - "(\"GitHub Actions\" OR Jenkins OR GitLab) pipeline"
+      - "(Azure OR GCP) DevOps"
+      - "(EKS OR ECS OR Helm)"
+      - "(\"AWS Lambda\" OR serverless)"
+      - "(Prometheus OR Grafana) monitoring"
+    extra_terms:                # used by the top-up when fewer than min_leads were found
+      - "(Linux server OR Nginx) deployment"
+      - "Ansible automation"
+      - "CloudFormation"
+      - "\"Site Reliability\""
+      - "(\"AWS cost\" OR \"cloud cost\") optimization"
+      - "DevSecOps"
+    platform_sites: [guru.com/jobs, contra.com, truelancer.com/freelance-project, freelancermap.com/projects,
+                     reddit.com/r/forhire]
+    linkedin_posts: 3           # LinkedIn posts "looking for a freelance / part-time DevOps ..." (US, UK, EU, AU)
+    post_regions: [United States, United Kingdom, Europe, Australia, remote]
+    topup_searches: 6
+  duckduckgo: {enabled: true}   # used only when no SERP key is set
+  # LinkedIn / Indeed part-time and contract roles (US, UK, EU, Australia, Canada, Germany, India), remote.
+  boards: {enabled: true, per_query: 20, max_queries: 8}
+  feeds: {enabled: true}        # Remotive, Jobicy, Himalayas: contract / freelance / part-time only
 
 email:
   send: true              # the workflow sends; locally the script only drafts unless you pass --send
   max_send: 30            # per run
   pause_seconds: [8, 20]
   recontact_after_days: 60
-  subject: "{contract} {title} | {name} | {years}+ yrs DevOps & Cloud | Available immediately"
+  subject: "{contract} {title} | {name} | {years}+ yrs DevOps & Cloud | Remote, part-time"
   resume: ../bulk_mail_sender/Saurabh_Agrawal_2026.pdf
   attachment_name: Saurabh_Agrawal_Resume.pdf
 
