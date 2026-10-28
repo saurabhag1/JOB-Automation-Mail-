@@ -96,6 +96,21 @@ def available_providers() -> list[str]:
 
 _DEAD: set[str] = set()    # providers that rejected their key / ran out of credit during this run
 _STRIKES: dict[str, int] = {}
+_OK: dict[str, int] = {}           # searches each provider answered this run
+_FAILED: dict[str, str] = {}       # why a provider was dropped
+
+
+def provider_report() -> str:
+    """'serper ok 12 · searchapi ok 4 · serpapi out of credit/quota (429) · scrapingdog: no key' (no secrets)."""
+    parts = []
+    for p in PROVIDER_ORDER:
+        if not os.getenv(KEY_ENV[p]):
+            parts.append(f"{p}: no key")
+        elif p in _FAILED:
+            parts.append(f"{p}: {_FAILED[p]}" + (f" after {_OK[p]} ok" if _OK.get(p) else ""))
+        else:
+            parts.append(f"{p} ok {_OK.get(p, 0)}")
+    return " · ".join(parts)
 
 
 def search_any(sess, query: str, providers: list[str], start: int = 0, log=None) -> list[dict]:
@@ -109,20 +124,26 @@ def search_any(sess, query: str, providers: list[str], start: int = 0, log=None)
     last = None
     for provider in order:
         try:
-            return SEARCH[provider](sess, query, os.environ[KEY_ENV[provider]])
+            found = SEARCH[provider](sess, query, os.environ[KEY_ENV[provider]])
+            _OK[provider] = _OK.get(provider, 0) + 1
+            return found
         except (requests.ConnectionError, requests.Timeout) as exc:
             _STRIKES[provider] = _STRIKES.get(provider, 0) + 1
             if _STRIKES[provider] >= 2:
                 _DEAD.add(provider)
+                _FAILED[provider] = "timing out"
                 if log:
                     log(f"  [google] {provider} keeps timing out - other keys used this run")
             last = exc
             continue
         except requests.HTTPError as exc:
             status = exc.response.status_code if exc.response is not None else 0
-            if status not in (401, 402, 403, 429):
+            body = (exc.response.text[:300].lower() if exc.response is not None else "")
+            out_of_credit = status == 400 and any(w in body for w in ("credit", "quota", "limit", "balance"))
+            if status not in (401, 402, 403, 429) and not out_of_credit:
                 raise
             _DEAD.add(provider)
+            _FAILED[provider] = ("key rejected" if status == 401 else "out of credit/quota") + f" ({status})"
             if log:
                 log(f"  [google] {provider} unavailable (HTTP {status}: key or credit) - other keys used this run")
             last = exc

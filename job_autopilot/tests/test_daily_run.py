@@ -269,3 +269,23 @@ def test_display_title():
     assert display_title("AZURE CLOUD ENGINEER") == "Azure Cloud Engineer"
     assert display_title("DEVOPS ENGINEER L4") == "DevOps Engineer L4"
     assert display_title("AWS DevOps Engineer") == "AWS DevOps Engineer"
+
+
+def test_out_of_credit_400_is_a_dead_key_and_is_reported(monkeypatch):
+    import requests
+
+    from autopilot.discovery import google_search as gs
+
+    def broke(sess, q, key):
+        resp = requests.Response()
+        resp.status_code, resp._content = 400, b'{"message":"Not enough credits"}'
+        raise requests.HTTPError(response=resp)
+
+    monkeypatch.setattr(gs, "SEARCH", {"serper": broke, "searchapi": lambda s, q, k: [{"link": "https://x"}]})
+    for name in ("_DEAD", "_FAILED", "_OK", "_STRIKES"):
+        monkeypatch.setattr(gs, name, set() if name == "_DEAD" else {})
+    monkeypatch.setattr(gs, "PROVIDER_ORDER", ["serper", "searchapi"])
+    monkeypatch.setenv("SERPER_KEY", "k")
+    monkeypatch.setenv("SEARCHAPI_KEY", "k")
+    assert gs.search_any(None, "q", ["serper", "searchapi"]) == [{"link": "https://x"}]
+    assert gs.provider_report() == "serper: out of credit/quota (400) · searchapi ok 1"

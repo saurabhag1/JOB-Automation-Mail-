@@ -13,7 +13,8 @@ budget: {min_fixed_usd: 100, min_hourly_usd: 10}   # marketplace projects paying
 sources:
   # Freelancer.com public API: open projects tagged DevOps, AWS, Kubernetes, Docker, Terraform,
   # Jenkins, Ansible, SRE, AWS Lambda, Azure, Google Cloud.
-  freelancer: {enabled: true, pages: 2}
+  freelancer: {enabled: true, pages: 2, queries: [devops, kubernetes, terraform, "aws deployment", docker, "ci/cd",
+                                                 "azure devops", "linux server"]}
   # PeoplePerHour: search pages -> each project's own page (posted / open-until / rate).
   peopleperhour: {enabled: true, max_details: 40, keywords: [devops, aws, kubernetes, terraform, docker, ci cd]}
   # Google, past week, via your SERP keys (Serper / SerpApi / ScraperAPI / SearchApi / Scrapingdog):

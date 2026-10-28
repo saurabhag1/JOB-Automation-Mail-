@@ -313,27 +313,48 @@ def freelancer_com(sess, cfg: dict) -> list[Lead]:
         except Exception as exc:  # noqa: BLE001
             log.info(f"  [freelancer.com] skipped: {type(exc).__name__}")
             break
-        for p in projects:
-            if p.get("deleted") or p.get("nonpublic") or p.get("status") != "active" or p.get("language") not in (None, "en"):
-                continue
-            budget, cur = p.get("budget") or {}, (p.get("currency") or {}).get("code", "")
-            skills = ", ".join(j.get("name", "") for j in p.get("jobs") or [])
-            url = f"https://www.freelancer.com/projects/{p.get('seo_url')}"
-            job = Job(source="Freelancer.com", title=p.get("title", ""), company="Freelancer.com client", url=url,
-                      location="Remote", description=f"{p.get('description') or ''}\n\nSkills: {skills}",
-                      apply_url=url, date_posted=to_datetime(p.get("time_submitted")), date_trusted=True,
-                      is_remote=True, salary_min=budget.get("minimum"), salary_max=budget.get("maximum"),
-                      salary_currency=cur, salary_interval="hourly" if p.get("type") == "hourly" else "fixed",
-                      external_id=str(p.get("id")))
-            age_h = (now - (p.get("time_submitted") or now)) / 3600
-            bids = (p.get("bid_stats") or {}).get("bid_count", 0)
-            leads.append(Lead(job, declared=p.get("type", ""),
-                              verified=f"Freelancer.com API: {p.get('frontend_project_status', 'open')} project, "
-                                       f"{bids} bids, posted {age_h:.0f} h ago"))
+        leads.extend(_freelancer_leads(projects, now))
         if len(projects) < 100:
             break
-    log.info(f"  [freelancer.com] {len(leads)} open projects with DevOps / cloud skills")
+    seen_ids = {lead.job.external_id for lead in leads}
+    for term in src.get("queries", []):
+        try:
+            r = sess.get("https://www.freelancer.com/api/projects/0.1/projects/active/",
+                         params={"query": term, "limit": 50, "full_description": "true", "job_details": "true",
+                                 "sort_field": "time_updated"})
+            projects = r.json().get("result", {}).get("projects", [])
+        except Exception as exc:  # noqa: BLE001
+            log.info(f"  [freelancer.com] '{term}' skipped: {type(exc).__name__}")
+            continue
+        for p in projects:
+            if str(p.get("id")) in seen_ids:
+                continue
+            seen_ids.add(str(p.get("id")))
+            leads.extend(_freelancer_leads([p], now))
+    log.info(f"  [freelancer.com] {len(leads)} open projects (DevOps / cloud skill tags + keyword searches)")
     return leads
+
+
+def _freelancer_leads(projects: list[dict], now: float) -> list[Lead]:
+    out = []
+    for p in projects:
+        if p.get("deleted") or p.get("nonpublic") or p.get("status") != "active" or p.get("language") not in (None, "en"):
+            continue
+        budget, cur = p.get("budget") or {}, (p.get("currency") or {}).get("code", "")
+        skills = ", ".join(j.get("name", "") for j in p.get("jobs") or [])
+        url = f"https://www.freelancer.com/projects/{p.get('seo_url')}"
+        job = Job(source="Freelancer.com", title=p.get("title", ""), company="Freelancer.com client", url=url,
+                  location="Remote", description=f"{p.get('description') or ''}\n\nSkills: {skills}",
+                  apply_url=url, date_posted=to_datetime(p.get("time_submitted")), date_trusted=True,
+                  is_remote=True, salary_min=budget.get("minimum"), salary_max=budget.get("maximum"),
+                  salary_currency=cur, salary_interval="hourly" if p.get("type") == "hourly" else "fixed",
+                  external_id=str(p.get("id")))
+        age_h = (now - (p.get("time_submitted") or now)) / 3600
+        bids = (p.get("bid_stats") or {}).get("bid_count", 0)
+        out.append(Lead(job, declared=p.get("type", ""),
+                        verified=f"Freelancer.com API: {p.get('frontend_project_status', 'open')} project, "
+                                 f"{bids} bids, posted {age_h:.0f} h ago"))
+    return out
 
 
 _PPH_RELEVANT = re.compile(r"devops|aws|amazon|kubernetes|k8s|terraform|docker|cloud|ci-?cd|jenkins|linux|server|"
@@ -875,7 +896,7 @@ def write_excel(leads: list[Lead], path: Path) -> Path:
     return path
 
 
-def email_report(xlsx: Path, leads: list[Lead], why: Counter, found: int, profile) -> None:
+def email_report(xlsx: Path, leads: list[Lead], why: Counter, found: int, profile, health: str = "") -> None:
     from autopilot.report_mail import _table
 
     user, password = os.getenv("EMAIL_ADDRESS", ""), os.getenv("EMAIL_PASSWORD", "")
@@ -892,7 +913,7 @@ def email_report(xlsx: Path, leads: list[Lead], why: Counter, found: int, profil
     summary = (f"{found} posts checked, {len(leads)} verified freelance / part-time leads kept "
                f"({', '.join(f'{k} {v}' for k, v in platforms.most_common())}).\n"
                f"Emailed {c[SENT]}, drafted {c[DRAFTED]}, apply on the platform / review {c[REVIEW]}.\n"
-               f"Dropped: {'; '.join(f'{k} {v}' for k, v in why.most_common(10))}\n\nThe workbook is attached.")
+               f"Dropped: {'; '.join(f'{k} {v}' for k, v in why.most_common(10))}\n{health}\n\nThe workbook is attached.")
     msg.set_content(summary)
     table = _table(["SR", "Platform", "Position", "Type", "Budget / rate", "Posted", "Contact", "Status", "Link"],
                    [[i, lead.job.source, lead.job.title, lead.kind, rate_of(lead.job),
@@ -955,6 +976,7 @@ def main(argv=None) -> int:
     if src["feeds"].get("enabled", True):
         leads += from_feeds(sess)
     found = len(leads)
+    all_found = list(leads)
 
     from autopilot.tailoring.free_llm import QuickLLM
 
@@ -969,11 +991,17 @@ def main(argv=None) -> int:
         log.info(f"Only {len(kept)} leads so far (target {want}) - {len(more_plan)} more searches")
         more = run_searches(sess, more_plan, cfg, settings, seen_urls)
         found += len(more)
+        all_found += more
         extra_kept, extra_why = screen(more, cfg, settings, profile, master, history,
                                        already={canonical_url(lead.job.url) for lead in kept})
         kept += extra_kept
         why += extra_why
     kept = order(kept)
+    found_by = Counter(lead.job.source for lead in all_found)
+    kept_by = Counter(lead.job.source for lead in kept)
+    health = ("Per source (found -> kept): " + ", ".join(f"{k} {v} -> {kept_by.get(k, 0)}" for k, v in found_by.most_common())
+              + f" | Search keys: {gs.provider_report()}")
+    log.info(health)
     log.info(f"{found} posts -> {len(kept)} verified freelance / part-time leads "
              f"({', '.join(f'{k} {v}' for k, v in Counter(lead.job.source for lead in kept).most_common())}). "
              "Dropped: " + "; ".join(f"{k} {v}" for k, v in why.most_common(10)))
@@ -1041,10 +1069,12 @@ def main(argv=None) -> int:
             fh.write(f"### Freelance DevOps work {stamp}\n- Posts checked: {found}\n- Verified leads: {len(kept)} "
                      f"({', '.join(f'{k} {v}' for k, v in Counter(lead.job.source for lead in kept).most_common())})\n"
                      f"- Emailed: {c[SENT]} · Drafted: {c[DRAFTED]} · Apply on platform / review: {c[REVIEW]}\n"
+                     f"- {health}\n"
+                     f"- Dropped: {'; '.join(f'{k} {v}' for k, v in why.most_common(10))}\n"
                      f"- Full workbook: in your email inbox\n")
     if cfg.get("report_email", True) and not args.no_report:
         try:
-            email_report(xlsx, kept, why, found, profile)
+            email_report(xlsx, kept, why, found, profile, health)
         except Exception as exc:  # noqa: BLE001 - the run itself succeeded
             log.info(f"! report email failed: {type(exc).__name__}")
     return 0
