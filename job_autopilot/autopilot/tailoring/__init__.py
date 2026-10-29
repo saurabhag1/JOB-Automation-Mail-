@@ -92,7 +92,11 @@ class Tailor:
                                     settings.get("tailoring.effort", "medium"), master, profile)
         elif mode in ("free", "auto") and free_keys_present():
             self.llm = FreeLLMChain(settings, master, profile, self.template_text, log)
-            log(f"Tailoring: free LLMs {', '.join(self.llm.names)} (best of {self.llm.best_of} drafts per job, "
+            if self.llm.names and self.llm.names[0] == "claude-code":
+                from autopilot.tailoring import claude_code
+
+                log(f"Tailoring: Claude via Claude Code ({claude_code.label()}), free LLMs only as fallback")
+            log(f"Tailoring: LLMs {', '.join(self.llm.names)} (best of {self.llm.best_of} drafts per job, "
                 f"each checked by the truth guard)")
         elif mode != "none":
             log("Tailoring: no LLM key found - using rule-based tailoring (reorder + focus).")

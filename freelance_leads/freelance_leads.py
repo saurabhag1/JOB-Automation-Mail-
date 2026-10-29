@@ -682,6 +682,40 @@ def screen(leads: list[Lead], cfg: dict, settings, profile, master: dict, histor
     return kept, why
 
 
+def ai_relevance(leads: list[Lead], cfg: dict, settings) -> tuple[list[Lead], int]:
+    """Local Claude runs only (portal): Claude reads each kept post and drops the ones that are not
+    really DevOps / cloud work for a 2-4 year engineer working 2-3 hours a day. GitHub runs skip this."""
+    from autopilot.tailoring import claude_code
+    from autopilot.tailoring.free_llm import QuickLLM
+
+    if not claude_code.enabled() or not leads:
+        return leads, 0
+    llm = QuickLLM(settings, log.info, timeout=180, max_models=1, budget_seconds=600)
+    availability = cfg.get("availability", "2-3 hours a day plus weekends")
+    dropped: set[int] = set()
+    for start in range(0, len(leads), 12):
+        batch = leads[start:start + 12]
+        listing = "\n\n".join(f"[{i}] {lead.job.title} ({lead.job.source})\n{lead.job.description[:1200]}"
+                              for i, lead in enumerate(batch))
+        data = llm.json(
+            "You screen freelance leads for a DevOps / cloud engineer with 3 years of experience (AWS, Kubernetes, "
+            f"Docker, Terraform, CI/CD, monitoring) who can work {availability}. For each post decide: is it mainly "
+            "DevOps / cloud infrastructure / CI-CD / deployment / SRE work (not app, web, mobile or data-science "
+            "development), right for 2-4 years of experience, and a genuine paid job (not a scam, not a freelancer "
+            'advertising themselves)? Reply as JSON {"posts": [{"i": 0, "keep": true, "why": "few words"}]}.\n\n'
+            + listing) or {}
+        for item in data.get("posts") or []:
+            try:
+                idx = int(item.get("i"))
+            except (TypeError, ValueError):
+                continue
+            if 0 <= idx < len(batch) and item.get("keep") is False:
+                dropped.add(start + idx)
+                batch[idx].note = f"dropped by Claude: {str(item.get('why') or '')[:80]}"
+                log.info(f"  [claude] not a fit: {batch[idx].job.title[:60]} - {str(item.get('why') or '')[:60]}")
+    return [lead for n, lead in enumerate(leads) if n not in dropped], len(dropped)
+
+
 def order(leads: list[Lead]) -> list[Lead]:
     """Contactable first, then the freshest and best-matching."""
     now = datetime.now(timezone.utc)
@@ -996,6 +1030,9 @@ def main(argv=None) -> int:
                                        already={canonical_url(lead.job.url) for lead in kept})
         kept += extra_kept
         why += extra_why
+    kept, judged_out = ai_relevance(kept, cfg, settings)
+    if judged_out:
+        why["not a DevOps fit (Claude)"] += judged_out
     kept = order(kept)
     found_by = Counter(lead.job.source for lead in all_found)
     kept_by = Counter(lead.job.source for lead in kept)

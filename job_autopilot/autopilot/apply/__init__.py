@@ -75,6 +75,10 @@ def existing_pipeline_addresses(settings: Settings) -> set[str]:
         seen.update(e.lower() for e in history.get("contacted", {}))
     except (OSError, ValueError):
         pass
+    from autopilot.apply import gmail_sent
+
+    if gmail_sent.enabled():   # local portal runs: everything this Gmail account sent recently
+        seen |= gmail_sent.sent_recipients(int(settings.get("apply.email.recontact_after_days", 60)))
     if not settings.get("sources.hr_email_leads.enabled", False):
         try:
             state = json.loads((REPO / "job_lead_analyzer" / "state.json").read_text(encoding="utf-8"))

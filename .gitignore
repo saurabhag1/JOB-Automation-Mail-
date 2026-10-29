@@ -7,3 +7,7 @@ freelance_leads/runs/
 freelance_leads/data/
 freelance_leads/__pycache__/
 freelance_leads/.pytest_cache/
+
+# Local portal: settings and local run logs stay on this Mac
+portal/data/
+portal/__pycache__/

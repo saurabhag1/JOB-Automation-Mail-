@@ -19,6 +19,7 @@ import requests
 
 from autopilot.config import Profile, Settings
 from autopilot.models import Job
+from autopilot.tailoring import claude_code
 from autopilot.tailoring.llm import SCHEMA, SYSTEM, LLMError, LLMUnavailable, _prompt_resume
 
 DEFAULT_PROVIDERS = [
@@ -51,15 +52,20 @@ class _Fatal(Exception):
 
 
 def free_keys_present() -> bool:
-    return any(os.getenv(v) for v in KEY_ENV.values())
+    return claude_code.enabled() or any(os.getenv(v) for v in KEY_ENV.values())
+
+
+def _local_claude() -> list[dict]:
+    """Claude Code first when a local portal run switched it on (never in GitHub Actions)."""
+    return [{"name": "claude-code", "models": [claude_code.model()]}] if claude_code.enabled() else []
 
 
 class FreeLLMChain:
     def __init__(self, settings: Settings, master: dict, profile: Profile, template_text: str = "", log=print):
         self.log = log
-        self.best_of = max(1, int(settings.get("tailoring.best_of", 2)))
+        self.best_of = 1 if claude_code.enabled() else max(1, int(settings.get("tailoring.best_of", 2)))
         configured = settings.get("tailoring.providers", DEFAULT_PROVIDERS) or DEFAULT_PROVIDERS
-        self.providers = [p for p in configured if os.getenv(KEY_ENV.get(p["name"], ""))]
+        self.providers = _local_claude() + [p for p in configured if os.getenv(KEY_ENV.get(p["name"], ""))]
         if not self.providers:
             raise LLMUnavailable("no GEMINI_API_KEY / GROQ_API_KEY / OPENROUTER_API_KEY in .env")
         self.system = SYSTEM.format(years=profile.years, notice=profile.notice_period or "not stated",
@@ -143,7 +149,10 @@ class FreeLLMChain:
         for model in provider["models"]:
             try:
                 started = time.time()
-                if name == "gemini":
+                if name == "claude-code":
+                    text, used = json.dumps(claude_code.ask(user, system=self.system, schema=SCHEMA)), \
+                        {"input": 0, "output": 0}
+                elif name == "gemini":
                     text, used = self._gemini(model, user)
                 else:
                     text, used = self._openai_style(name, model, user)
@@ -152,7 +161,7 @@ class FreeLLMChain:
                 self.dead.add(name)
                 self.log(f"    {name}: {exc} - provider off for this run")
                 raise
-            except (_Retryable, ValueError, requests.RequestException) as exc:
+            except (_Retryable, ValueError, requests.RequestException, claude_code.ClaudeCodeError) as exc:
                 last = f"{model}: {exc}"
                 continue
             label = f"{name}:{model}"
@@ -204,7 +213,7 @@ class QuickLLM:
         self.log, self.timeout, self.max_models = log, timeout, max_models
         self.deadline = time.time() + budget_seconds if budget_seconds else None   # optional total time budget
         configured = settings.get("tailoring.providers", DEFAULT_PROVIDERS) or DEFAULT_PROVIDERS
-        self.providers = [p for p in configured if os.getenv(KEY_ENV.get(p["name"], ""))]
+        self.providers = _local_claude() + [p for p in configured if os.getenv(KEY_ENV.get(p["name"], ""))]
         self.cool_until: dict[str, float] = {}
         self.calls = Counter()
 
@@ -212,6 +221,9 @@ class QuickLLM:
         return bool(self.providers)
 
     def _call(self, provider: str, model: str, prompt: str) -> str:
+        if provider == "claude-code":
+            return json.dumps(claude_code.ask(prompt, system="Answer only with the JSON object the prompt asks for.",
+                                              timeout=int(max(self.timeout, 60) * 3)))
         if provider == "gemini":
             r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                               headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"]}, timeout=self.timeout,
@@ -242,7 +254,7 @@ class QuickLLM:
                 except _Fatal:
                     self.cool_until[name] = time.time() + 10 ** 6     # key rejected: off for this run
                     break
-                except (_Retryable, ValueError, requests.RequestException):
+                except (_Retryable, ValueError, requests.RequestException, claude_code.ClaudeCodeError):
                     continue
                 if isinstance(data, dict):
                     self.calls[f"{name}:{model}"] += 1

@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Automation Control Center</title>
+<style>
+:root {
+  --bg: #f4f6fb; --panel: #ffffff; --panel2: #f8fafc; --fg: #0f172a; --muted: #64748b; --line: #e2e8f0;
+  --accent: #4f46e5; --accent2: #7c3aed; --ok: #16a34a; --warn: #d97706; --bad: #dc2626; --run: #2563eb;
+  --shadow: 0 1px 2px rgba(15,23,42,.06), 0 8px 24px rgba(15,23,42,.06); --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0b1020; --panel: #121a2e; --panel2: #0f1628; --fg: #e5e9f5; --muted: #94a3b8; --line: #23304d;
+          --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35); }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif; background: var(--bg); color: var(--fg); }
+a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
+header { background: linear-gradient(120deg, var(--accent), var(--accent2)); color: #fff; padding: 22px 28px 64px; }
+header h1 { margin: 0; font-size: 22px; letter-spacing: .2px; }
+header p { margin: 4px 0 0; opacity: .85; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.pill { background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.25); padding: 3px 10px; border-radius: 999px; font-size: 12px; }
+.pill.okp::before { content: "● "; color: #86efac; } .pill.badp::before { content: "● "; color: #fca5a5; }
+main { max-width: 1280px; margin: -44px auto 40px; padding: 0 20px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 18px; }
+.card h3 { margin: 0 0 4px; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+.tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.tag.local { color: var(--accent); border-color: var(--accent); }
+.sched { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+.about { font-size: 13px; color: var(--fg); opacity: .9; max-height: 5.4em; overflow: hidden; position: relative; }
+.about.open { max-height: none; }
+.more { font-size: 12px; cursor: pointer; color: var(--accent); }
+.note { font-size: 12px; color: var(--muted); background: var(--panel2); border: 1px dashed var(--line); border-radius: 10px; padding: 8px 10px; margin: 10px 0; }
+.runs { display: flex; gap: 6px; align-items: center; margin: 10px 0; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; background: var(--muted); }
+.dot.success { background: var(--ok); } .dot.failure { background: var(--bad); } .dot.cancelled { background: var(--warn); }
+.dot.in_progress, .dot.queued { background: var(--run); animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+button, .btn { font: inherit; border: 1px solid var(--line); background: var(--panel2); color: var(--fg); padding: 8px 14px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 13px; }
+button.primary { background: linear-gradient(120deg, var(--accent), var(--accent2)); color: #fff; border: none; }
+button.danger { color: var(--bad); border-color: var(--bad); background: transparent; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+section { margin-top: 22px; }
+section > h2 { font-size: 15px; margin: 0 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.row { display: grid; grid-template-columns: 1.1fr 1.9fr; gap: 16px; } @media (max-width: 900px) { .row { grid-template-columns: 1fr; } }
+label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+select, input[type=number], input[type=text] { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); color: var(--fg); }
+.switch { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; }
+.console { background: #0a0f1d; color: #d1e7ff; font: 12px/1.45 var(--mono); border-radius: 12px; padding: 12px; height: 380px; overflow: auto; white-space: pre-wrap; word-break: break-word; border: 1px solid #1d2742; }
+.status { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.badge { font-size: 12px; padding: 3px 10px; border-radius: 999px; font-weight: 700; }
+.badge.running { background: rgba(37,99,235,.15); color: var(--run); } .badge.finished { background: rgba(22,163,74,.15); color: var(--ok); }
+.badge.failed { background: rgba(220,38,38,.15); color: var(--bad); } .badge.stopped { background: rgba(217,119,6,.15); color: var(--warn); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.kpi { background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.kpi b { display: block; font-size: 22px; } .kpi span { font-size: 12px; color: var(--muted); }
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.tabs button { background: transparent; } .tabs button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tablewrap { overflow: auto; max-height: 520px; border: 1px solid var(--line); border-radius: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th { position: sticky; top: 0; background: var(--panel2); text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:hover td { background: var(--panel2); }
+.plat { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(79,70,229,.12); color: var(--accent); white-space: nowrap; }
+.muted { color: var(--muted); } .small { font-size: 12px; }
+.toast { position: fixed; right: 18px; bottom: 18px; background: var(--fg); color: var(--bg); padding: 10px 14px; border-radius: 10px; box-shadow: var(--shadow); display: none; max-width: 420px; z-index: 9; }
+.empty { padding: 26px; text-align: center; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Job Automation Control Center</h1>
+  <p>Your GitHub workflows at a glance - and local runs on this Mac with Claude.</p>
+  <div class="pills" id="pills"></div>
+</header>
+<main>
+  <section style="margin-top:0">
+    <div class="grid" id="flows"></div>
+  </section>
+
+  <section>
+    <h2>Local run</h2>
+    <div class="row">
+      <div class="card">
+        <h3>Run settings</h3>
+        <div class="small muted">Used by the local runs started from this page. GitHub's scheduled runs are not affected.</div>
+        <div class="switch"><input type="checkbox" id="use_claude"><label for="use_claude" style="margin:0;color:var(--fg)">Use Claude (Claude Code CLI) instead of the free models</label></div>
+        <label>Claude model (alias or full name)</label>
+        <input type="text" id="model" placeholder="opus">
+        <label>Effort</label>
+        <select id="effort"><option>low</option><option>medium</option><option>high</option><option>xhigh</option><option>max</option></select>
+        <div class="switch"><input type="checkbox" id="gmail_dedupe"><label for="gmail_dedupe" style="margin:0;color:var(--fg)">Skip everyone this Gmail emailed in the last 60 days (incl. GitHub runs)</label></div>
+        <label>Job Autopilot - max applications per run</label>
+        <input type="number" id="autopilot_max" min="1" max="200">
+        <label>Freelance - max emails per run</label>
+        <input type="number" id="freelance_max_send" min="0" max="100">
+        <div class="actions">
+          <button onclick="saveSettings()">Save settings</button>
+          <button onclick="testClaude()" id="testbtn">Test Claude</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="status" id="status"><span class="muted">No local run yet.</span></div>
+        <div class="console" id="console"></div>
+        <div class="actions"><button class="danger" id="stopbtn" onclick="stopRun()" disabled>Stop run</button>
+          <span class="small muted" id="logmeta"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Results</h2>
+    <div class="card">
+      <div class="tabs">
+        <button id="tab-freelance" class="on" onclick="showTab('freelance')">Freelance / contract leads</button>
+        <button id="tab-autopilot" onclick="showTab('autopilot')">Job Autopilot</button>
+        <button id="tab-history" onclick="showTab('history')">Local run history</button>
+        <button onclick="loadResults()" style="margin-left:auto">Refresh</button>
+      </div>
+      <div id="results"></div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const TOKEN = "__PORTAL_TOKEN__";
+let state = null, results = null, tab = "freelance", logId = null, logOffset = 0;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function api(path, body) {
+  const r = await fetch(path, {method: body ? "POST" : "GET", headers: {"X-Portal-Token": TOKEN, "Content-Type": "application/json"},
+                                body: body ? JSON.stringify(body) : undefined});
+  return r.json();
+}
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", 5000); }
+
+function renderPills() {
+  const k = state.keys, p = [];
+  p.push(`<span class="pill ${state.claude_cli ? "okp" : "badp"}">Claude Code CLI ${state.claude_cli ? "found" : "not found"}</span>`);
+  p.push(`<span class="pill ${k.gmail ? "okp" : "badp"}">Gmail ${k.gmail ? "ready" : "not set"}</span>`);
+  p.push(`<span class="pill ${k.search.length ? "okp" : "badp"}">Search keys: ${k.search.join(", ") || "none"}</span>`);
+  p.push(`<span class="pill">Free LLMs: ${k.free_llms.join(", ") || "none"}</span>`);
+  if (state.repo) p.push(`<span class="pill">GitHub: ${esc(state.repo)}</span>`);
+  $("pills").innerHTML = p.join("");
+}
+function renderFlows() {
+  const running = state.active && state.active.status === "running";
+  $("flows").innerHTML = state.workflows.map(w => {
+    const dots = (w.github_runs || []).map(r => `<a href="${esc(r.url)}" target="_blank" title="${esc(r.when)} - ${esc(r.conclusion || r.status)} (${esc(r.event)})"><span class="dot ${esc(r.conclusion || r.status)}"></span></a>`).join("");
+    const last = (w.github_runs || [])[0];
+    const local = w.local ? `
+        <button class="primary" ${running ? "disabled" : ""} onclick="runLocal('${w.file}', false)">Run locally (send)</button>
+        <button ${running ? "disabled" : ""} onclick="runLocal('${w.file}', true)">Dry run</button>` : "";
+    return `<div class="card">
+      <h3>${esc(w.name)} ${w.local ? '<span class="tag local">runs locally too</span>' : '<span class="tag">GitHub only</span>'}</h3>
+      <div class="sched">⏱ ${esc(w.schedule)}</div>
+      <div class="about" id="about-${w.file}">${esc(w.about)}</div>
+      <span class="more" onclick="document.getElementById('about-${w.file}').classList.toggle('open')">more / less</span>
+      <div class="runs">GitHub: ${dots || '<span class="muted">no runs visible</span>'} ${last ? `<span>last ${esc(last.when)} IST</span>` : ""}</div>
+      <div class="note">${esc(w.local_note)}</div>
+      <div class="actions">${local}
+        ${w.github_url ? `<a class="btn" href="${esc(w.github_url)}" target="_blank">Open on GitHub</a>` : ""}
+        <button onclick="ghDispatch('${w.file}')" title="needs GITHUB_TOKEN in job_autopilot/.env">Run on GitHub</button>
+      </div></div>`;
+  }).join("");
+}
+function renderSettings() {
+  const s = state.settings;
+  for (const k of ["model", "effort", "autopilot_max", "freelance_max_send"]) if (document.activeElement !== $(k)) $(k).value = s[k];
+  $("use_claude").checked = s.use_claude; $("gmail_dedupe").checked = s.gmail_dedupe;
+}
+function renderStatus() {
+  const a = state.active;
+  if (!a) return;
+  $("status").innerHTML = `<span class="badge ${esc(a.status)}">${esc(a.status)}</span><b>${esc(a.title)}</b>
+     <span class="small muted">${esc(a.mode)} · ${esc(a.llm)} · started ${esc(a.started)}${a.ended ? " · ended " + esc(a.ended) : ""}</span>`;
+  $("stopbtn").disabled = a.status !== "running";
+  if (logId !== a.id) { logId = a.id; logOffset = 0; $("console").textContent = ""; }
+}
+async function pollLog() {
+  if (!logId) return;
+  const r = await api(`/api/log?id=${encodeURIComponent(logId)}&offset=${logOffset}`);
+  if (r.text) {
+    const c = $("console"), atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 40;
+    c.textContent += r.text; logOffset = r.offset;
+    if (c.textContent.length > 400000) c.textContent = c.textContent.slice(-300000);
+    if (atBottom) c.scrollTop = c.scrollHeight;
+  }
+  $("logmeta").textContent = `log: ${Math.round(logOffset / 1024)} KB`;
+}
+async function refresh() {
+  try { state = await api("/api/state"); } catch (e) { return; }
+  renderPills(); renderFlows(); renderSettings(); renderStatus();
+  if (tab === "history") renderResults();
+}
+async function runLocal(file, dry) {
+  const w = state.workflows.find(x => x.file === file);
+  const what = dry ? "a DRY RUN (nothing sent to HR / clients)" : "a LIVE run - it emails HR / clients from your Gmail";
+  if (!confirm(`Start ${w.name} as ${what}?\n\nAI: ${state.settings.use_claude ? "Claude Code " + state.settings.model + " (" + state.settings.effort + ")" : "free LLMs"}\nThe report comes to your email at the end.`)) return;
+  const r = await api("/api/run", {file, dry_run: dry});
+  if (!r.ok) return toast(r.message);
+  toast("Started. Follow the live log below."); refresh();
+}
+async function stopRun() { const r = await api("/api/stop", {}); toast(r.message); refresh(); }
+async function saveSettings() {
+  const body = {model: $("model").value, effort: $("effort").value, use_claude: $("use_claude").checked,
+                gmail_dedupe: $("gmail_dedupe").checked, autopilot_max: +$("autopilot_max").value, freelance_max_send: +$("freelance_max_send").value};
+  const r = await api("/api/settings", body); toast(r.ok ? "Settings saved." : "Could not save."); refresh();
+}
+async function testClaude() {
+  await saveSettings(); $("testbtn").disabled = true; toast("Asking Claude...");
+  const r = await api("/api/claude-test", {}); $("testbtn").disabled = false; toast(r.message);
+}
+async function ghDispatch(file) { const r = await api("/api/github-dispatch", {file}); toast(r.message); }
+
+function showTab(t) { tab = t; for (const x of ["freelance", "autopilot", "history"]) $("tab-" + x).classList.toggle("on", x === t); renderResults(); }
+async function loadResults() { results = await api("/api/results"); renderResults(); }
+function table(cols, rows, link) {
+  if (!rows.length) return '<div class="empty">Nothing yet.</div>';
+  return `<div class="tablewrap"><table><tr>${cols.map(c => `<th>${esc(c[0])}</th>`).join("")}</tr>${rows.map(r => `<tr>${cols.map(c => {
+    const v = r[c[1]] ?? ""; if (c[2] === "link") return `<td>${v ? `<a href="${esc(v)}" target="_blank">open</a>` : ""}</td>`;
+    if (c[2] === "plat") return `<td><span class="plat">${esc(v)}</span></td>`; return `<td>${esc(v)}</td>`; }).join("")}</tr>`).join("")}</table></div>`;
+}
+function renderResults() {
+  const el = $("results");
+  if (tab === "history") {
+    const h = (state && state.history) || [];
+    el.innerHTML = table([["Started", "started"], ["Workflow", "title"], ["Mode", "mode"], ["AI", "llm"], ["Status", "status"], ["Ended", "ended"]], h);
+    return;
+  }
+  if (!results) { el.innerHTML = '<div class="empty">Loading...</div>'; return; }
+  if (tab === "freelance") {
+    const f = results.freelance || {};
+    if (!f.leads) { el.innerHTML = '<div class="empty">No freelance run on this Mac yet.</div>'; return; }
+    const byPlat = {}; f.leads.forEach(l => byPlat[l.Platform] = (byPlat[l.Platform] || 0) + 1);
+    const sent = f.leads.filter(l => l.Status === "Sent").length;
+    el.innerHTML = `<div class="kpis"><div class="kpi"><b>${f.leads.length}</b><span>verified leads</span></div>
+      <div class="kpi"><b>${sent}</b><span>emailed</span></div>
+      ${Object.entries(byPlat).map(([k, v]) => `<div class="kpi"><b>${v}</b><span>${esc(k)}</span></div>`).join("")}</div>
+      <div class="small muted" style="margin-bottom:8px">Run ${esc(f.run)} · <a href="/files?path=${encodeURIComponent(f.file)}&token=${TOKEN}">download Excel</a></div>` +
+      table([["#", "SR"], ["Platform", "Platform", "plat"], ["Position", "Position"], ["What", "Works / Description"], ["Budget / rate", "Salary / Rate"],
+             ["Type", "Contract Type"], ["Posted", "Posted"], ["Contact", "Contact / HR Email"], ["Status", "Status"], ["Verified", "Verified"], ["Link", "Link", "link"]], f.leads);
+    return;
+  }
+  const a = results.autopilot || {};
+  if (!a.items) { el.innerHTML = '<div class="empty">No Job Autopilot run on this Mac yet.</div>'; return; }
+  const it = a.items, k = (key, label) => `<div class="kpi"><b>${esc(it[key] ?? "0")}</b><span>${label}</span></div>`;
+  el.innerHTML = `<div class="kpis">${k("Postings found", "postings found")}${k("Jobs kept (genuine, this week, fit you)", "jobs kept")}
+      ${k("HR emails found (all, incl. skipped jobs)", "HR emails found")}${k("Emails sent", "HR emails sent")}${k("Forms submitted by the bot", "forms submitted")}
+      ${k("Jobs to apply by hand (APPLY_MANUALLY)", "apply by hand")}</div>
+      <div class="small muted" style="margin-bottom:8px">Run ${esc(a.folder)} · ${a.excel ? `<a href="/files?path=${encodeURIComponent(a.excel)}&token=${TOKEN}">download Excel</a>` : ""}
+      ${it["HR emails not sent, why"] ? " · not sent: " + esc(it["HR emails not sent, why"]) : ""}</div>
+      <h3 style="margin:10px 0 6px">Sent / submitted</h3>` +
+      table([["Time", "Time (IST)"], ["Channel", "Channel"], ["To / where", "Sent to / where"], ["Company", "Company"], ["Role", "Job title"], ["Status", "Status"], ["Post", "Job post", "link"]], a.sent) +
+      `<h3 style="margin:16px 0 6px">Apply by hand</h3>` +
+      table([["Role", "Job title"], ["Company", "Company"], ["Location", "Location"], ["Why", "Why by hand"], ["Apply", "Apply here", "link"]], a.manual);
+}
+refresh(); loadResults();
+setInterval(refresh, 5000);
+setInterval(pollLog, 1500);
+setInterval(() => { if (state && state.active && state.active.status === "running") loadResults(); }, 30000);
+</script>
+</body>
+</html>
